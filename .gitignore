@@ -1,0 +1,42 @@
+## MAC housekeeping
+*.DS_Store
+
+## LaTeX package directory
+./settings/
+tex/sty
+sty/
+
+## Core latex auxiliary files
+*.aux
+*.blg
+*.cb
+*.cb2
+*.fdb_latexmk
+*.fls
+*.fmt
+*.fot
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.snm
+*.synctex.*
+*.toc
+*.vrb
+
+## Binary files
+*.bin
+*.mat
+*.zip
+
+## PSLF files
+*.chf
+*.com
+*.drw
+*.lnk
+*.log
+*.rep
+*.tmp
+*-color
+*.000000
