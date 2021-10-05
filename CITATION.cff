@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Elliott"
+  given-names: "Ryan"
+  orcid: "https://orcid.org/0000-0002-2063-8488"
+- family-names: "Trudnowski"
+  given-names: "Daniel"
+- family-names: "Choi"
+  given-names: "Hyungjin"
+- family-names: "Nguyen"
+  given-names: "Tam"
+title: "The Power and Energy Storage Systems Toolbox, PSTess"
+version: 1.0
+date-released: 2021-09-18
+url: "https://github.com/sandialabs/snl-pstess"
