@@ -177,15 +177,15 @@ MATLAB programming to address these issues on their own as they arise.
 <a id="references"></a>
 
 R. Elliott, D. Trudnowski, H. Choi, T. Nguyen, "The Power and Energy Storage
-Systems Toolbox – PSTess Version 1.0" September 2021,
-[SAND2021-11259](https://www.sandia.gov/ess-ssl/wp-content/uploads/2021/09/sand2021_11259_pstess_elliott_choi.pdf).
+Systems Toolbox – PSTess Version 1.0" September 2021, SAND2021-11259. Available:
+[https://www.sandia.gov/ess-ssl/](https://www.sandia.gov/ess-ssl/wp-content/uploads/2021/09/sand2021_11259_pstess_elliott_choi.pdf)
 
 J. Chow and K. Cheung, "A toolbox for power system dynamics and
 control engineering education and research," IEEE Trans. Power Syst.,
 vol. 7, no. 4, pp. 1559–1564, 1992.
 
 J. Chow, "Power System Toolbox Version 3.0 manual." Available:
-https://www.ecse.rpi.edu/~chowj/PSTMan.pdf.
+https://www.ecse.rpi.edu/~chowj/PSTMan.pdf
 
 R. Elliott, A. Ellis, P. Pourbeik, J. Sanchez-Gasca, J. Senthil,
 and J. Weber, "Generic photovoltaic system models for WECC–A status
@@ -193,10 +193,11 @@ report," in IEEE Power Energy Soc. Gen. Meeting, pp. 1–5, 2015.
 
 R. T. Elliott, P. Arabshahi, and D. S. Kirschen, "Stabilizing
 transient disturbances with utility-scale inverter-based resources,"
-IET Gen. Tran. Dist., vol. 14, pp. 6534–6544, Dec. 2020.
+IET Gen. Tran. Dist., vol. 14, pp. 6534–6544, Dec. 2020. Available:
+[https://ietresearch.onlinelibrary.wiley.com/doi/](https://ietresearch.onlinelibrary.wiley.com/doi/epdf/10.1049/iet-gtd.2020.1319)
 
 CAISO, "Inverter-based interconnection requirements (ER19-1153)."
-Available: http://www.caiso.com/Documents/.
+Available: [https://www.caiso.com/Documents/](http://www.caiso.com/Documents/Feb28-2019-InterconnectionProcessEnhancements-Inverter-BasedGeneratorInterconnectionRequirements-ER19-1153.pdf)
 
 M. Klein, G. Rogers, and P. Kundur, "A fundamental study of
 inter-area oscillations in power systems," IEEE Trans. Power Syst.,
