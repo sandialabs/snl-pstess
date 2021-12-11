@@ -21,6 +21,11 @@ Entity account `@sandia.gov: snl-pstess`<br />
 Project maintainer (Ryan Elliott) `@sandia.gov: rtellio`<br />
 Project co-maintainer (Hyungjin Choi) `@sandia.gov: hchoi`
 
+### Partners
+The development of PSTess was a collaborative effort between Sandia
+National Laboratories and Montana Tech. We thank Dr. Daniel Trudnowski
+and Tam Nguyen for their contributions.
+
 ## Table of contents
 - [Introduction](#intro)
     - [Models](#models)
