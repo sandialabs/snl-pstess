@@ -4,8 +4,9 @@
 
 # PSTess: The Power and Energy Storage Systems Toolbox
 
-Welcome to the Power and Energy Storage Systems Toolbox. This is the PSTess
-README. Please refer to the table of contents below to help you navigate.
+Welcome to the Power and Energy Storage Systems Toolbox. This is the
+**PSTess** README. Please refer to the table of contents below to help
+you navigate.
 
 Current release version: 1.0
 
@@ -22,9 +23,9 @@ Project maintainer (Ryan Elliott) `@sandia.gov: rtellio`<br />
 Project co-maintainer (Hyungjin Choi) `@sandia.gov: hchoi`
 
 ### Partners
-The development of PSTess was a collaborative effort between Sandia
-National Laboratories and Montana Tech. We thank Dr. Daniel Trudnowski
-and Tam Nguyen for their contributions.
+The development of **PSTess** was a collaborative effort between
+Sandia National Laboratories and Montana Tech. We thank Dr. Daniel
+Trudnowski and Tam Nguyen for their contributions.
 
 ## Table of contents
 - [Introduction](#intro)
@@ -89,12 +90,12 @@ This work was supported by the U.S. DOE Energy Storage Program within
 the Office of Electricity. The authors would like to thank Dr. Imre
 Gyuk, Director of Energy Storage Research.
 
-This toolbox owes a great deal to the original developers of PST: Drs.
-Joe Chow, Kwok Cheung, and Graham Rogers. We thank them for their
-contributions and for their generosity in releasing **PST** under the
-MIT license, enabling others to build upon the foundation they
-created. See the NOTICE file in this repository for details about the
-**PST** license.
+This toolbox owes a great deal to the original developers of **PST**:
+Drs. Joe Chow, Kwok Cheung, and Graham Rogers. We thank them for
+their contributions and for their generosity in releasing **PST**
+under the MIT license, enabling others to build upon the foundation
+they created. See the NOTICE file in this repository for details about
+the **PST** license.
 
 ## Getting started
 <a id="getting_started"></a>
