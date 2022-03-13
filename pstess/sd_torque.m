@@ -12,7 +12,7 @@ function [Ts,Td,f,ld,pd] = sd_torque(a,c_p,c_pm,mac_state,H,fbase)
 %         Td damping torque as a function of frequency
 %         f frequency vector
 %         ld eigenvalues of non-angle or speed terms of a (ad)
-%         pd participation factors associatedwith ld
+%         pd participation factors associated with ld
 
 %-----------------------------------------------------------------------------%
 
@@ -51,7 +51,7 @@ else
     Td = Ts;
     for k = 1:length(f)
         Ts(k) = dda + real(yda(k)) - imag(ydw(k))*wf(k);
-        Td(k) = ddw + real(ydw(k)) + imag(ydw(k))/wf(k);
+        Td(k) = ddw + real(ydw(k)) + imag(yda(k))/wf(k);
     end
 end
 
