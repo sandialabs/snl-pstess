@@ -66,18 +66,18 @@ function [x] = ess_sud(i,k,bus,flag,x)
 
 global g;  % declaring struct of global variables
 
-lbnd = 1e-3;  % lower bound to prevent division by zero
-
-% essud_pot(:,1) -- conversion factor into system MVA base
-essud_pot(:,1) = g.ess.ess_con(g.ess.dessud_idx,6)/g.sys.basmva;
-
-% sensor_set -- buses with angle sensors (internal)
-% sud_sensor_idx -- indexes in sensor_set with ess_sud controllers
-sensor_set = [3, 5, 9, 10, 12, 13];  % external buses 3, 10, 14, 20, 110, 120
-sud_sensor_idx = [2, 4, 5, 6];       % external buses 10, 20, 110, 120
-n_sensor = length(sensor_set);
-
 if ~isempty(g.ess.essud_con)
+    lbnd = 1e-3;  % lower bound to prevent division by zero
+
+    % essud_pot(:,1) -- conversion factor into system MVA base
+    essud_pot(:,1) = g.ess.ess_con(g.ess.dessud_idx,6)/g.sys.basmva;
+
+    % sensor_set -- buses with angle sensors (internal)
+    % sud_sensor_idx -- indexes in sensor_set with ess_sud controllers
+    sensor_set = [3, 5, 9, 10, 12, 13];  % external buses 3, 10, 14, 20, 110, 120
+    sud_sensor_idx = [2, 4, 5, 6];       % external buses 10, 20, 110, 120
+    n_sensor = length(sensor_set);
+
     if (flag == 0)  % initialization
         if (i ~= 0)
             % caution: non-vectorized computation is not supported!
