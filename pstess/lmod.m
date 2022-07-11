@@ -66,7 +66,7 @@ if ~isempty(g.lmod.lmod_con)
             if (g.lmod.lmod_st(i,k) < g.lmod.lmod_pot(i,2))     % anti-windup reset
                 g.lmod.lmod_st(i,k) = g.lmod.lmod_pot(i,2);
                 if (g.lmod.dlmod_st(i,k) < 0)
-                    dmod_st(i,k) = 0;
+                    g.lmod.dlmod_st(i,k) = 0;
                 end
             end
         else  % vectorized computation
