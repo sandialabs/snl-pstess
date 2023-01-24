@@ -1,6 +1,10 @@
 [comment]: <> (this is a markdown document and the special characters are for formatting)
 
-<img src="man/logo/snl-pstess_logo.png" alt="PSTess logo" width=300px margin="auto" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="man/logo/snl-pstess_logo_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="man/logo/snl-pstess_logo.png">
+  <img src="man/logo/snl-pstess_logo.png" alt="PSTess logo" width=300px margin="auto" />
+</picture>
 
 # PSTess: The Power and Energy Storage Systems Toolbox
 
