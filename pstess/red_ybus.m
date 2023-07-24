@@ -172,7 +172,7 @@ end
 jgz_idx = find(jg == 0);
 jg(jgz_idx) = [];
 
-% remove zero rows from permutaion matrix
+% remove zero rows from permutation matrix
 perm(jgz_idx,:) = [];
 
 Ymod = (diag(y))*perm';
@@ -237,7 +237,7 @@ if (g.igen.n_ig ~= 0)
     jmz_idx = find(jm == 0);
     jm(jmz_idx) = [];
 
-    % remove zero rows from permutaion matrix
+    % remove zero rows from permutation matrix
     perm(jmz_idx,:) = [];
     Ymmod = diag(y(n_gm+1:n_tot,1))*perm';
     Y_b(n_gm+1:n_tot,jm) = -Ymmod;

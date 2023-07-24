@@ -89,7 +89,7 @@ if (g.tg.n_tgh ~= 0)
 
     if (flag == 2)   % turbine governor dynamics calculation
         if (i ~= 0)  % scalar computation
-            % vector computaion only
+            % vector computation only
             error('tg_hydro: dynamics calculation must be vectorized.');
         else
             % vectorized computation

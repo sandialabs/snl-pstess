@@ -3,7 +3,7 @@ function dc_cont(i,k,kdc,bus,flag)
 %
 % Purpose: models hvdc pole controls
 %
-% Input: i - 0 vector computaion only for hvdc controls
+% Input: i - 0 vector computation only for hvdc controls
 %        k - integer time for overall simulation
 %        kdc - integer time for dc
 %        bus - solved loadflow bus data
