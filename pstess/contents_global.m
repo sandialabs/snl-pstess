@@ -1,8 +1,7 @@
 %-----------------------------------------------------------------------------%
 % List of global variables for power system simulation
 %
-% Power System Toolbox Version 3.1.2
-% December 2020
+% Power and Energy Storage Systems Toolbox, PSTess, v1.0
 %-----------------------------------------------------------------------------%
 
 % bus // algebraic network variables
