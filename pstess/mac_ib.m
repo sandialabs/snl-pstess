@@ -216,6 +216,14 @@ if (g.mac.n_ib ~= 0)
                             + sin(g.mac.mac_ang(i,1)).*g.mac.psidpp;
                     end
                 end
+
+                % check for ivm generator model
+                if ~isempty(g.mac.mac_ib_ivm)
+                    ib_ivm_chk = find(g.mac.mac_ib_ivm == i);
+                    if ~isempty(ib_ivm_chk)
+                        error('mac_ib: all ivm calculations must be vectorized.');
+                    end
+                end
             end
         else
             % vector computation
@@ -413,12 +421,28 @@ if (g.mac.n_ib ~= 0)
                 g.mac.psidpp = eqra + g.mac.mac_con(g.mac.mac_ib_sub,8) ...
                                       .*g.mac.curdg(g.mac.mac_ib_sub,1);
 
+                g.mac.psikd(g.mac.mac_ib_sub,1) = ...
+                    eqra + g.mac.mac_con(g.mac.mac_ib_sub,4) ...
+                           .*g.mac.curdg(g.mac.mac_ib_sub,1);
+
+                g.mac.eqprime(g.mac.mac_ib_sub,1) = ...
+                    eqra + g.mac.mac_con(g.mac.mac_ib_sub,7) ...
+                           .*g.mac.curdg(g.mac.mac_ib_sub,1);
+
                 edra = -g.mac.ed(g.mac.mac_ib_sub,1) ...
                        - g.mac.mac_con(g.mac.mac_ib_sub,5) ...
                          .*g.mac.curdg(g.mac.mac_ib_sub,1);
 
                 g.mac.psiqpp = edra + g.mac.mac_con(g.mac.mac_ib_sub,13) ...
                                       .*g.mac.curqg(g.mac.mac_ib_sub,1);
+
+                g.mac.psikq(g.mac.mac_ib_sub,1) = ...
+                    edra + g.mac.mac_con(g.mac.mac_ib_sub,4) ...
+                           .*g.mac.curqg(g.mac.mac_ib_sub,1);
+
+                g.mac.edprime(g.mac.mac_ib_sub,1) = ...
+                    edra + g.mac.mac_con(g.mac.mac_ib_sub,12) ...
+                           .*g.mac.curqg(g.mac.mac_ib_sub,1);
 
                 g.mac.psi_re(g.mac.mac_ib_sub,1) = ...
                     sin(g.mac.mac_ang(g.mac.mac_ib_sub,1)).*(-g.mac.psiqpp) ...
@@ -427,6 +451,73 @@ if (g.mac.n_ib ~= 0)
                 g.mac.psi_im(g.mac.mac_ib_sub,1) = ...
                     -cos(g.mac.mac_ang(g.mac.mac_ib_sub,1)).*(-g.mac.psiqpp) ...
                     + sin(g.mac.mac_ang(g.mac.mac_ib_sub,1)).*g.mac.psidpp;
+            end
+
+            % check for ivm generator models
+            if (g.mac.n_ib_ivm ~= 0)
+                % busnum -- bus number vector
+                busnum = g.bus.bus_int(g.mac.mac_con(g.mac.mac_ib_ivm,2));
+
+                % eterm -- terminal bus voltage magnitude
+                % theta -- terminal bus angle in radians
+                g.mac.eterm(g.mac.mac_ib_ivm,1) = bus(busnum,2);
+                g.bus.theta(busnum,1) = bus(busnum,3)*pi/180;
+
+                % pelect -- electrical output power, active
+                % qelect -- electrical output power, reactive
+                g.mac.pelect(g.mac.mac_ib_ivm,1) = ...
+                    bus(busnum,4).*g.mac.mac_con(g.mac.mac_ib_ivm,22);
+
+                g.mac.qelect(g.mac.mac_ib_ivm,1) = ...
+                    bus(busnum,5).*g.mac.mac_con(g.mac.mac_ib_ivm,23);
+
+                % terminal voltage phasor in system reference frame
+                Vt = g.mac.eterm(g.mac.mac_ib_ivm,1) ...
+                     .*exp(1j*g.bus.theta(busnum,1));
+
+                % complex current in system reference frame (generator base)
+                It = conj((g.mac.pelect(g.mac.mac_ib_ivm,1) ...
+                           + 1j*g.mac.qelect(g.mac.mac_ib_ivm,1))./Vt) ...
+                     .*g.mac.mac_pot(g.mac.mac_ib_ivm,1);
+
+                % voltage behind reactance in system reference frame
+                E = Vt + (g.mac.mac_con(g.mac.mac_ib_ivm,5) ...
+                          + 1j*g.mac.mac_con(g.mac.mac_ib_ivm,7)).*It;
+
+                % psi_re -- real-part of internal voltage used for network interface
+                % psi_im -- imag-part of internal voltage used for network interface
+                g.mac.psi_re(g.mac.mac_ib_ivm,1) = real(E);
+                g.mac.psi_im(g.mac.mac_ib_ivm,1) = imag(E);
+
+                % mac_ang -- internal voltage angle (rad)
+                % mac_spd -- angular velocity of the voltage phasor in steady state (pu)
+                g.mac.mac_ang(g.mac.mac_ib_ivm,1) = atan2(imag(E),real(E));
+                g.mac.mac_spd(g.mac.mac_ib_ivm,1) = ones(g.mac.n_ivm,1);
+
+                % system reference frame rotation to Park's frame
+                rot = 1j*exp(-1j*g.mac.mac_ang(g.mac.mac_ib_ivm,1));
+
+                % eprime = E.*rot;
+                g.mac.eqprime(g.mac.mac_ib_ivm,1) = abs(E);  % imag(eprime) = abs(E); real(eprime) = 0;
+
+                % vex -- commanded voltage phasor magnitude (pu)
+                % fldcur -- commanded voltage phasor angle (rad)
+                g.mac.vex(g.mac.mac_ib_ivm,:) = g.mac.eqprime(g.mac.mac_ib_ivm,1);
+                g.mac.fldcur(g.mac.mac_ib_ivm,:) = g.mac.mac_ang(g.mac.mac_ib_ivm,1);
+
+                curr = It.*rot;
+                g.mac.curdg(g.mac.mac_ib_ivm,1) = real(curr);
+                g.mac.curqg(g.mac.mac_ib_ivm,1) = imag(curr);
+
+                g.mac.curd(g.mac.mac_ib_ivm,1) = ...
+                    real(curr)./g.mac.mac_pot(g.mac.mac_ib_ivm,1);
+
+                g.mac.curq(g.mac.mac_ib_ivm,1) = ...
+                    imag(curr)./g.mac.mac_pot(g.mac.mac_ib_ivm,1);
+
+                v = Vt.*rot;
+                g.mac.ed(g.mac.mac_ib_ivm,1) = real(v);
+                g.mac.eq(g.mac.mac_ib_ivm,1) = imag(v);
             end
         end
 

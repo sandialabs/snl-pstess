@@ -31,8 +31,9 @@ for kl = 2:4
     mac_sub(0,kl,bus_sim,flag);
     mac_tra(0,kl,bus_sim,flag);
     mac_em(0,kl,bus_sim,flag);
+    gfma(0,kl,bus_sim,flag);
+    mac_ivm(0,kl,bus_sim,flag);
     mac_ib(0,kl,bus_sim,flag);
-  % mac_ivm(0,kl,bus_sim,flag);  % for future use
 
     dc_cont(0,kl,10*(kl-1)+1,bus_sim,flag);
 
@@ -70,7 +71,7 @@ for kl = 2:4
         mac_sub(0,kl,bus_sim,flag);
         mac_tra(0,kl,bus_sim,flag);
         mac_em(0,kl,bus_sim,flag);
-      % mac_ivm(0,kl,bus_sim,flag);   % for future use
+        mac_ivm(0,kl,bus_sim,flag);
 
         dpwf(0,kl,flag);
         pss(0,kl,flag);
@@ -111,7 +112,12 @@ for kl = 2:4
 
     if (g.ess.n_ess ~= 0)
         lsc(0,kl,bus_sim,flag);
+        reec(0,kl,bus_sim,flag,h_sol);
         ess(0,kl,bus_sim,flag,h_sol);
+    end
+
+    if (g.ivm.n_ivm ~= 0)
+        gfma(0,kl,bus_sim,flag);
     end
 
     cur = g.mac.cur_re(1:g.mac.n_mac,kl) + 1j*g.mac.cur_im(1:g.mac.n_mac,kl);
@@ -140,7 +146,9 @@ pwrmod_p_state = rlmod_state + nss.pwrmod_max*g.pwr.n_pwrmod;
 pwrmod_q_state = pwrmod_p_state + nss.pwrmod_max*g.pwr.n_pwrmod;
 dcl_state = pwrmod_q_state + nss.dcl_max*g.dc.n_dcl;
 ess_state = dcl_state + nss.ess_max*g.ess.n_ess;
-% lsc_state = ess_state + nss.lsc_max*g.lsc.n_lsc;  % for future expansion
+lsc_state = ess_state + nss.lsc_max*g.lsc.n_lsc;
+reec_state = lsc_state + nss.reec_max*g.reec.n_reec;
+% gfma_state = reec_state + nss.gfma_max*g.gfma.n_gfma;  % for future expansion
 
 d_vector = zeros(max_state,2);
 for kl = 3:4
@@ -280,7 +288,8 @@ for kl = 3:4
             g.ess.dess3(:,kl);
         d_vector(dcl_state+3*g.ess.n_ess+1:dcl_state+4*g.ess.n_ess,kl-2) = ...
             g.ess.dess4(:,kl);
-        d_vector(dcl_state+4*g.ess.n_ess+1:dcl_state+5*g.ess.n_ess,kl-2) = 0.0;  % 48
+        d_vector(dcl_state+4*g.ess.n_ess+1:dcl_state+5*g.ess.n_ess,kl-2) = 0.0;
+        %   g.ess.dess5(:,kl);  % 48
     end
 
     if (g.lsc.n_lsc ~= 0)
@@ -315,6 +324,46 @@ for kl = 3:4
         d_vector(ess_state+14*g.lsc.n_lsc+1:ess_state+15*g.lsc.n_lsc,kl-2) = ...
             g.lsc.dlsc15(:,kl);  % 63
     end
+
+    if (g.reec.n_reec ~= 0)
+        d_vector(lsc_state+0*g.reec.n_reec+1:lsc_state+1*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec1(:,kl);
+        d_vector(lsc_state+1*g.reec.n_reec+1:lsc_state+2*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec2(:,kl);
+        d_vector(lsc_state+2*g.reec.n_reec+1:lsc_state+3*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec3(:,kl);
+        d_vector(lsc_state+3*g.reec.n_reec+1:lsc_state+4*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec4(:,kl);
+        d_vector(lsc_state+4*g.reec.n_reec+1:lsc_state+5*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec5(:,kl);
+        d_vector(lsc_state+5*g.reec.n_reec+1:lsc_state+6*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec6(:,kl);
+        d_vector(lsc_state+6*g.reec.n_reec+1:lsc_state+7*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec7(:,kl);
+        d_vector(lsc_state+7*g.reec.n_reec+1:lsc_state+8*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec8(:,kl);
+        d_vector(lsc_state+8*g.reec.n_reec+1:lsc_state+9*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec9(:,kl);
+        d_vector(lsc_state+9*g.reec.n_reec+1:lsc_state+10*g.reec.n_reec,kl-2) = ...
+            g.reec.dreec10(:,kl);  % 73
+    end
+
+    if (g.gfma.n_gfma ~= 0)
+        % note: overload mitigation states not included in linearization;
+        %       this includes gfma2, gfma3, gfma6, gfma7
+        d_vector(reec_state+0*g.gfma.n_gfma+1:reec_state+1*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma1(:,kl);
+        d_vector(reec_state+1*g.gfma.n_gfma+1:reec_state+2*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma4(:,kl);
+        d_vector(reec_state+2*g.gfma.n_gfma+1:reec_state+3*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma5(:,kl);
+        d_vector(reec_state+3*g.gfma.n_gfma+1:reec_state+4*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma8(:,kl);
+        d_vector(reec_state+4*g.gfma.n_gfma+1:reec_state+5*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma9(:,kl);
+        d_vector(reec_state+5*g.gfma.n_gfma+1:reec_state+6*g.gfma.n_gfma,kl-2) = ...
+            g.gfma.dgfma10(:,kl);  % 77
+    end
 end
 
 %-----------------------------------------------------------------------------%
@@ -327,7 +376,7 @@ for kl = 1:size(d_verify,1)
         if (sign(d_vector(kl,1))*sign(d_vector(kl,2)) > 0)
             estr = '\np_file: nonzero finite difference components ';
             estr = [estr, 'have the same sign at state index %0.0f.'];
-            error(sprintf(estr,kl));
+            warning(sprintf(estr,kl));
         end
     end
 
@@ -345,7 +394,7 @@ for kl = 1:size(d_verify,1)
         if (d_verify(kl,3) > 0.95)
             estr = '\np_file: mismatch between finite difference ';
             estr = [estr, 'components is too large at state index %0.0f.'];
-            error(sprintf(estr,kl));
+            warning(sprintf(estr,kl));
         end
     end
 end
@@ -363,8 +412,8 @@ if (c_state == 0)
         j_state = j + sum(state(1:k-1));
     end
 
-    if (g.mac.n_ib ~= 0)
-        k_nib_idx = find(g.mac.not_ib_idx == k);
+    if ~isempty(not_ib_ivm_idx)
+        k_nib_idx = find(not_ib_ivm_idx == k);
     else
         k_nib_idx = k;
     end
@@ -377,14 +426,14 @@ if (c_state == 0)
 
     a_mat(:,j_state) = p_mat*d_vector/pert;
 
-    % form output matrices
+    % form output matrices (ivm's have pelect but not telect or pmech)
     c_p(g.mac.not_ib_idx,j_state) = (g.mac.pelect(g.mac.not_ib_idx,3) ...
                                      - g.mac.pelect(g.mac.not_ib_idx,4)) ...
                                     .*g.mac.mac_pot(g.mac.not_ib_idx,1)/(2*pert);
-    c_t(g.mac.not_ib_idx,j_state) = (g.mac.telect(g.mac.not_ib_idx,3) ...
-                                     - g.mac.telect(g.mac.not_ib_idx,4))/(2*pert);
-    c_pm(g.mac.not_ib_idx,j_state) = (g.mac.pmech(g.mac.not_ib_idx,3) ...
-                                      - g.mac.pmech(g.mac.not_ib_idx,4))/(2*pert);
+    c_t(not_ib_ivm_idx,j_state) = (g.mac.telect(not_ib_ivm_idx,3) ...
+                                   - g.mac.telect(not_ib_ivm_idx,4))/(2*pert);
+    c_pm(not_ib_ivm_idx,j_state) = (g.mac.pmech(not_ib_ivm_idx,3) ...
+                                    - g.mac.pmech(not_ib_ivm_idx,4))/(2*pert);
     c_v(:,j_state) = (abs(g.bus.bus_v(:,3)) ...
                       - abs(g.bus.bus_v(:,4)))/(2*pert);
     c_ang(:,j_state) = (g.bus.theta(:,3)-g.bus.theta(:,4))/(2*pert);
@@ -428,6 +477,16 @@ if (c_state == 0)
     if (g.ess.n_ess ~= 0)
         c_ess_p(:,j_state) = real(g.ess.ess_scmd(:,3)-g.ess.ess_scmd(:,4))/(2*pert);
         c_ess_q(:,j_state) = imag(g.ess.ess_scmd(:,3)-g.ess.ess_scmd(:,4))/(2*pert);
+    end
+
+    if (g.reec.n_reec ~= 0)
+        c_reec_v(:,j_state) = (g.reec.reec1(:,3) - g.reec.reec1(:,4))/(2*pert);
+        c_reec_q(:,j_state) = (g.reec.reec3(:,3) - g.reec.reec3(:,4))/(2*pert);
+    end
+
+    if (g.gfma.n_gfma ~= 0)
+        c_gfma_p(:,j_state) = (g.gfma.gfma8(:,3) - g.gfma.gfma8(:,4))/(2*pert);
+        c_gfma_q(:,j_state) = (g.gfma.gfma9(:,3) - g.gfma.gfma9(:,4))/(2*pert);
     end
 else
     % form b and d matrices
@@ -543,6 +602,18 @@ else
     elseif (c_state == 12)
         b_ess_q(:,ess_input) = p_mat*d_vector/pert;
         % note: d_ess is zero because of the time constant
+    elseif (c_state == 13)
+        b_reec_v(:,reec_input) = p_mat*d_vector/pert;
+        % note: d_reec is zero because of the time constant
+    elseif (c_state == 14)
+        b_reec_q(:,reec_input) = p_mat*d_vector/pert;
+        % note: d_reec is zero because of the time constant
+    elseif (c_state == 15)
+        b_gfma_p(:,gfma_input) = p_mat*d_vector/pert;
+        % note: d_gfma is zero because of the time constant
+    elseif (c_state == 16)
+        b_gfma_q(:,gfma_input) = p_mat*d_vector/pert;
+        % note: d_gfma is zero because of the time constant
     end
 end
 
@@ -574,14 +645,14 @@ for kl = 2:4
         g.mac.psi_re(:,kl) = g.mac.psi_re(:,1);
         g.mac.psi_im(:,kl) = g.mac.psi_im(:,1);
         g.mac.pm_sig(:,kl) = g.mac.pm_sig(:,1);
-        %
+
         g.mac.mac_ang(:,kl) = g.mac.mac_ang(:,1);
         g.mac.mac_spd(:,kl) = g.mac.mac_spd(:,1);
         g.mac.edprime(:,kl) = g.mac.edprime(:,1);
         g.mac.eqprime(:,kl) = g.mac.eqprime(:,1);
         g.mac.psikd(:,kl) = g.mac.psikd(:,1);
         g.mac.psikq(:,kl) = g.mac.psikq(:,1);
-        %
+
         g.mac.dmac_ang(:,kl) = g.mac.dmac_ang(:,1);
         g.mac.dmac_spd(:,kl) = g.mac.dmac_spd(:,1);
         g.mac.dedprime(:,kl) = g.mac.dedprime(:,1);
@@ -592,13 +663,13 @@ for kl = 2:4
 
     if (g.exc.n_exc ~= 0)
         g.exc.V_A(:,kl) = g.exc.V_A(:,1);  % not a state variable
-        %
+
         g.exc.V_TR(:,kl) = g.exc.V_TR(:,1);
         g.exc.V_As(:,kl) = g.exc.V_As(:,1);
         g.exc.V_R(:,kl) = g.exc.V_R(:,1);
         g.exc.Efd(:,kl) = g.exc.Efd(:,1);
         g.exc.R_f(:,kl) = g.exc.R_f(:,1);
-        %
+
         g.exc.dV_TR(:,kl) = g.exc.dV_TR(:,1);
         g.exc.dV_As(:,kl) = g.exc.dV_As(:,1);
         g.exc.dV_R(:,kl) = g.exc.dV_R(:,1);
@@ -610,7 +681,7 @@ for kl = 2:4
         g.pss.pss1(:,kl) = g.pss.pss1(:,1);
         g.pss.pss2(:,kl) = g.pss.pss2(:,1);
         g.pss.pss3(:,kl) = g.pss.pss3(:,1);
-        %
+
         g.pss.dpss1(:,kl) = g.pss.dpss1(:,1);
         g.pss.dpss2(:,kl) = g.pss.dpss2(:,1);
         g.pss.dpss3(:,kl) = g.pss.dpss3(:,1);
@@ -623,7 +694,7 @@ for kl = 2:4
         g.dpw.sdpw4(:,kl) = g.dpw.sdpw4(:,1);
         g.dpw.sdpw5(:,kl) = g.dpw.sdpw5(:,1);
         g.dpw.sdpw6(:,kl) = g.dpw.sdpw6(:,1);
-        %
+
         g.dpw.dsdpw1(:,kl) = g.dpw.dsdpw1(:,1);
         g.dpw.dsdpw2(:,kl) = g.dpw.dsdpw2(:,1);
         g.dpw.dsdpw3(:,kl) = g.dpw.dsdpw3(:,1);
@@ -638,7 +709,7 @@ for kl = 2:4
         g.tg.tg3(:,kl) = g.tg.tg3(:,1);
         g.tg.tg4(:,kl) = g.tg.tg4(:,1);
         g.tg.tg5(:,kl) = g.tg.tg5(:,1);
-        %
+
         g.tg.dtg1(:,kl) = g.tg.dtg1(:,1);
         g.tg.dtg2(:,kl) = g.tg.dtg2(:,1);
         g.tg.dtg3(:,kl) = g.tg.dtg3(:,1);
@@ -650,7 +721,7 @@ for kl = 2:4
         g.ind.vdp(:,kl) = g.ind.vdp(:,1);
         g.ind.vqp(:,kl) = g.ind.vqp(:,1);
         g.ind.slip(:,kl) = g.ind.slip(:,1);
-        %
+
         g.ind.dvdp(:,kl) = g.ind.dvdp(:,1);
         g.ind.dvqp(:,kl) = g.ind.dvqp(:,1);
         g.ind.dslip(:,kl) = g.ind.dslip(:,1);
@@ -660,7 +731,7 @@ for kl = 2:4
         g.igen.vdpig(:,kl) = g.igen.vdpig(:,1);
         g.igen.vqpig(:,kl) = g.igen.vqpig(:,1);
         g.igen.slig(:,kl) = g.igen.slig(:,1);
-        %
+
         g.igen.dvdpig(:,kl) = g.igen.dvdpig(:,1);
         g.igen.dvqpig(:,kl) = g.igen.dvqpig(:,1);
         g.igen.dslig(:,kl) = g.igen.dslig(:,1);
@@ -696,7 +767,7 @@ for kl = 2:4
         g.pwr.pwrmod_p_st(:,kl) = g.pwr.pwrmod_p_st(:,1);
         g.pwr.dpwrmod_p_st(:,kl) = g.pwr.dpwrmod_p_st(:,1);
         g.pwr.pwrmod_p_sig(:,kl) = g.pwr.pwrmod_p_sig(:,1);
-        %
+
         g.pwr.pwrmod_q_st(:,kl) = g.pwr.pwrmod_q_st(:,1);
         g.pwr.dpwrmod_q_st(:,kl) = g.pwr.dpwrmod_q_st(:,1);
         g.pwr.pwrmod_q_sig(:,kl) = g.pwr.pwrmod_q_sig(:,1);
@@ -708,13 +779,13 @@ for kl = 2:4
         g.dc.i_dcr(:,kl) = g.dc.i_dcr(:,1);
         g.dc.i_dci(:,kl) = g.dc.i_dci(:,1);
         g.dc.v_dcc(:,kl) = g.dc.v_dcc(:,1);
-        %
+
         g.dc.dv_conr(:,kl) = g.dc.dv_conr(:,1);
         g.dc.dv_coni(:,kl) = g.dc.dv_coni(:,1);
         g.dc.di_dcr(:,kl) = g.dc.di_dcr(:,1);
         g.dc.di_dci(:,kl) = g.dc.di_dci(:,1);
         g.dc.dv_dcc(:,kl) = g.dc.dv_dcc(:,1);
-        %
+
         g.dc.Vdc(:,kl) = g.dc.Vdc(:,1);
         g.dc.i_dc(:,kl) = g.dc.i_dc(:,1);
         g.dc.alpha(:,kl) = g.dc.alpha(:,1);
@@ -728,13 +799,13 @@ for kl = 2:4
         g.ess.ess3(:,kl) = g.ess.ess3(:,1);
         g.ess.ess4(:,kl) = g.ess.ess4(:,1);
         g.ess.ess5(:,kl) = g.ess.ess5(:,1);
-        %
+
         g.ess.dess1(:,kl) = g.ess.dess1(:,1);
         g.ess.dess2(:,kl) = g.ess.dess2(:,1);
         g.ess.dess3(:,kl) = g.ess.dess3(:,1);
         g.ess.dess4(:,kl) = g.ess.dess4(:,1);
         g.ess.dess5(:,kl) = g.ess.dess5(:,1);
-        %
+
         g.ess.ess_sig(:,kl) = g.ess.ess_sig(:,1);
         g.ess.ess_cur(:,kl) = g.ess.ess_cur(:,1);
         g.ess.ess_soc(:,kl) = g.ess.ess_soc(:,1);
@@ -761,7 +832,7 @@ for kl = 2:4
         g.lsc.lsc13(:,kl) = g.lsc.lsc13(:,1);
         g.lsc.lsc14(:,kl) = g.lsc.lsc14(:,1);
         g.lsc.lsc15(:,kl) = g.lsc.lsc15(:,1);
-        %
+
         g.lsc.dlsc1(:,kl) = g.lsc.dlsc1(:,1);
         g.lsc.dlsc2(:,kl) = g.lsc.dlsc2(:,1);
         g.lsc.dlsc3(:,kl) = g.lsc.dlsc3(:,1);
@@ -777,12 +848,88 @@ for kl = 2:4
         g.lsc.dlsc13(:,kl) = g.lsc.dlsc13(:,1);
         g.lsc.dlsc14(:,kl) = g.lsc.dlsc14(:,1);
         g.lsc.dlsc15(:,kl) = g.lsc.dlsc15(:,1);
-        %
+
         g.lsc.lsc_scmd(:,kl) = g.lsc.lsc_scmd(:,1);
         g.lsc.theta_sensor(:,kl) = g.lsc.theta_sensor(:,1);
         g.lsc.theta_coi_pade(:,kl) = g.lsc.theta_coi_pade(:,1);
         g.lsc.theta_lsc_pade(:,kl) = g.lsc.theta_lsc_pade(:,1);
       % g.lsc.theta_coi_del(:,kl) = g.lsc.theta_coi_del(:,1);
+    end
+
+    if (g.reec.n_reec ~= 0)
+        g.reec.reec1(:,kl) = g.reec.reec1(:,1);
+        g.reec.reec2(:,kl) = g.reec.reec2(:,1);
+        g.reec.reec3(:,kl) = g.reec.reec3(:,1);
+        g.reec.reec4(:,kl) = g.reec.reec4(:,1);
+        g.reec.reec5(:,kl) = g.reec.reec5(:,1);
+        g.reec.reec6(:,kl) = g.reec.reec6(:,1);
+        g.reec.reec7(:,kl) = g.reec.reec7(:,1);
+        g.reec.reec8(:,kl) = g.reec.reec8(:,1);
+        g.reec.reec9(:,kl) = g.reec.reec9(:,1);
+        g.reec.reec10(:,kl) = g.reec.reec10(:,1);
+
+        g.reec.dreec1(:,kl) = g.reec.dreec1(:,1);
+        g.reec.dreec2(:,kl) = g.reec.dreec2(:,1);
+        g.reec.dreec3(:,kl) = g.reec.dreec3(:,1);
+        g.reec.dreec4(:,kl) = g.reec.dreec4(:,1);
+        g.reec.dreec5(:,kl) = g.reec.dreec5(:,1);
+        g.reec.dreec6(:,kl) = g.reec.dreec6(:,1);
+        g.reec.dreec7(:,kl) = g.reec.dreec7(:,1);
+        g.reec.dreec8(:,kl) = g.reec.dreec8(:,1);
+        g.reec.dreec9(:,kl) = g.reec.dreec9(:,1);
+        g.reec.dreec10(:,kl) = g.reec.dreec10(:,1);
+
+        g.reec.icmd(:,kl) = g.reec.icmd(:,1);
+        g.reec.paux(:,kl) = g.reec.paux(:,1);
+        g.reec.reec_sig(:,kl) = g.reec.reec_sig(:,1);
+
+        g.reec.iqmin = -100*ones(g.reec.n_reec,1);
+        g.reec.iqmax = 100*ones(g.reec.n_reec,1);
+
+        g.reec.pref(:,kl) = g.reec.pref(:,1);
+        g.reec.qref(:,kl) = g.reec.qref(:,1);
+
+      % static references don't get reset here
+
+        g.reec.vdip = false(g.reec.n_reec,1);
+        g.reec.vdip_tick = -1*ones(g.reec.n_reec,1);
+        g.reec.vdip_time = zeros(g.reec.n_reec,1);
+        g.reec.vdip_icmd = zeros(g.reec.n_reec,1);
+
+        g.reec.vblk = false(g.reec.n_reec,1);
+        g.reec.vblk_tick = -1*ones(g.reec.n_reec,1);
+        g.reec.vblk_time = zeros(g.reec.n_reec,1);
+    end
+
+    if (g.gfma.n_gfma ~= 0)
+        g.gfma.gfma1(:,kl) = g.gfma.gfma1(:,1);
+        g.gfma.gfma2(:,kl) = g.gfma.gfma2(:,1);
+        g.gfma.gfma3(:,kl) = g.gfma.gfma3(:,1);
+        g.gfma.gfma4(:,kl) = g.gfma.gfma4(:,1);
+        g.gfma.gfma5(:,kl) = g.gfma.gfma5(:,1);
+        g.gfma.gfma6(:,kl) = g.gfma.gfma6(:,1);
+        g.gfma.gfma7(:,kl) = g.gfma.gfma7(:,1);
+        g.gfma.gfma8(:,kl) = g.gfma.gfma8(:,1);
+        g.gfma.gfma9(:,kl) = g.gfma.gfma9(:,1);
+        g.gfma.gfma10(:,kl) = g.gfma.gfma10(:,1);
+
+        g.gfma.dgfma1(:,kl) = g.gfma.dgfma1(:,1);
+        g.gfma.dgfma2(:,kl) = g.gfma.dgfma2(:,1);
+        g.gfma.dgfma3(:,kl) = g.gfma.dgfma3(:,1);
+        g.gfma.dgfma4(:,kl) = g.gfma.dgfma4(:,1);
+        g.gfma.dgfma5(:,kl) = g.gfma.dgfma5(:,1);
+        g.gfma.dgfma6(:,kl) = g.gfma.dgfma6(:,1);
+        g.gfma.dgfma7(:,kl) = g.gfma.dgfma7(:,1);
+        g.gfma.dgfma8(:,kl) = g.gfma.dgfma8(:,1);
+        g.gfma.dgfma9(:,kl) = g.gfma.dgfma9(:,1);
+        g.gfma.dgfma10(:,kl) = g.gfma.dgfma10(:,1);
+
+        g.gfma.gfma_sig(:,kl) = g.gfma.gfma_sig(:,1);
+
+        g.gfma.pset(:,kl) = g.gfma.pset(:,1);
+        g.gfma.qset(:,kl) = g.gfma.qset(:,1);
+        g.gfma.vset(:,kl) = g.gfma.vset(:,1);
+        g.gfma.lim_flag = false(g.gfma.n_gfma,1);
     end
 end
 

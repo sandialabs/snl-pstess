@@ -6,7 +6,7 @@ function lsc(i,k,bus,flag)
 %          NOTE - there must be a matching inverter-based resource,
 %                 such as an energy storage system
 %
-% Input:   i - energy storage system number (index)
+% Input:   i - LTV synchronizing torque control number (index)
 %              if i = 0, vectorized computation
 %          k - integer time
 %          bus - solved loadflow bus data

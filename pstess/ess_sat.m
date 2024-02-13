@@ -22,6 +22,11 @@ function [ip_inj,iq_inj] = ess_sat(k,p_inj,q_inj,v_term,flag,varargin)
 %-----------------------------------------------------------------------------%
 % Version history
 %
+% Version:  1.1
+% Date:     February 2024
+% Author:   Ryan Elliott
+% Purpose:  Updated to handle REEC_D protection logic
+%
 % Version:  1.0
 % Date:     November 2020
 % Author:   Ryan Elliott
@@ -37,44 +42,106 @@ ip_inj = p_inj./max(v_term,lbnd);
 iq_inj = q_inj./max(v_term,lbnd);
 i_inj = ip_inj + 1j*iq_inj;
 
-% checking for current limit violations
-mask = (abs(i_inj) > g.ess.ess_pot(:,3));
-if any(mask)
-    ip_sign = sign(ip_inj);                       % storing injection signs
-    iq_sign = sign(iq_inj);
+%-----------------------------------------------------------------%
+% interpolating the vdl curves
 
-    ip_inj(mask) = abs(ip_inj(mask));             % one-quadrant perspective
-    iq_inj(mask) = abs(iq_inj(mask));
+vdlp = zeros(g.ess.n_ess,1);
+vdlq = zeros(g.ess.n_ess,1);
+for ii = 1:g.ess.n_ess
+    vdl = g.ess.vdl{ii};
 
-    ip_lim = g.ess.ess_pot(:,3);                  % initialize the limits
-    iq_lim = g.ess.ess_pot(:,3);
+    % interpolating the active current curves
+    mp = diff(vdl.ip)./diff(vdl.vp);
 
-    p_mask = mask & (g.ess.ess_con(:,9) == 1);    % active priority
-    q_mask = mask & (g.ess.ess_con(:,9) == 2);    % reactive priority
-    pq_mask = mask & (g.ess.ess_con(:,9) == 3);   % proportional scaling
+    if (v_term(ii) <= vdl.vp(1))
+        vdlp(ii) = vdl.ip(1);
+    elseif (v_term(ii) >= vdl.vp(end))
+        vdlp(ii) = vdl.ip(end);
+    else
+        % binary search, leftmost element procedure
+        jj = 0;
+        ub = length(vdl.vp);
+        while (jj < ub)
+            mb = floor((jj + ub)/2);
+            if (v_term(ii) > vdl.vp(mb+1))
+                jj = mb + 1;
+            else
+                ub = mb;
+            end
+        end
 
-    % active priority
-    ip_inj(p_mask) = min(ip_inj(p_mask),g.ess.ess_pot(p_mask,3));
-    iq_lim(p_mask) = sqrt(g.ess.ess_pot(p_mask,3).^2 - ip_inj(p_mask).^2);
-    iq_inj(p_mask) = min(iq_inj(p_mask),iq_lim(p_mask));
+        vdlp(ii) = mp(jj)*(v_term(ii) - vdl.vp(jj)) + vdl.ip(jj);
+    end
 
-    % reactive priority
-    iq_inj(q_mask) = min(iq_inj(q_mask),g.ess.ess_pot(q_mask,3));
-    ip_lim(q_mask) = sqrt(g.ess.ess_pot(q_mask,3).^2 - iq_inj(q_mask).^2);
-    ip_inj(q_mask) = min(ip_inj(q_mask),ip_lim(q_mask));
+    %-------------------------------------------------------------%
+    % interpolating the reactive current curves
 
-    % proportional scaling
-    pq_scale = g.ess.ess_pot(pq_mask,3)./abs(i_inj(pq_mask));
-    ip_inj(pq_mask) = pq_scale.*ip_inj(pq_mask);
-    iq_inj(pq_mask) = pq_scale.*iq_inj(pq_mask);
+    mq = diff(vdl.iq)./diff(vdl.vq);
 
-    % accounting for positive and negative injections
-    ip_inj(mask) = ip_sign(mask).*abs(ip_inj(mask));
-    iq_inj(mask) = iq_sign(mask).*abs(iq_inj(mask));
+    if (v_term(ii) <= vdl.vq(1))
+        vdlq(ii) = vdl.iq(1);
+    elseif (v_term(ii) >= vdl.vq(end))
+        vdlq(ii) = vdl.iq(end);
+    else
+        % binary search, leftmost element procedure
+        jj = 0;
+        ub = length(vdl.vq);
+        while (jj < ub)
+            mb = floor((jj + ub)/2);
+            if (v_term(ii) > vdl.vq(mb+1))
+                jj = mb + 1;
+            else
+                ub = mb;
+            end
+        end
+
+        vdlq(ii) = mq(jj)*(v_term(ii) - vdl.vq(jj)) + vdl.iq(jj);
+    end
 end
 
 %-----------------------------------------------------------------%
-% rate limiting
+% current limiting
+
+ip_max = min(vdlp,g.ess.ess_pot(:,3));
+iq_max = min(vdlq,g.ess.ess_pot(:,3));
+
+mask = (vdlq < 0);
+if any(mask)
+    % binding the iq command when vdlq is negative
+    iq_max(mask) = max(vdlq(mask),-g.ess.ess_pot(mask,3));
+    iq_inj(mask) = iq_max(mask);
+end
+
+p_mask = (g.ess.ess_con(:,9) == 1) & (iq_max >= 0);   % active priority
+q_mask = (g.ess.ess_con(:,9) == 2) | (iq_max < 0);    % reactive priority
+pq_mask = (g.ess.ess_con(:,9) == 3) & (iq_max >= 0);  % proportional scaling
+
+% scaling the current command in proportional mode
+mask = pq_mask & (abs(i_inj) > g.ess.ess_pot(:,3));
+if any(mask)
+    pq_scale = g.ess.ess_pot(mask,3)./abs(i_inj(mask));
+    ip_inj(mask) = pq_scale.*ip_inj(mask);
+    iq_inj(mask) = pq_scale.*iq_inj(mask);
+end
+
+ip_cap = sqrt(g.ess.ess_pot(:,3).^2 - iq_inj.^2);
+iq_cap = sqrt(g.ess.ess_pot(:,3).^2 - ip_inj.^2);
+
+ip_max(q_mask) = min(ip_max(q_mask),real(ip_cap(q_mask)));
+iq_max(p_mask) = min(iq_max(p_mask),real(iq_cap(p_mask)));
+
+ip_min = -g.ess.ess_con(:,22).*ip_max;
+iq_min = -iq_max;
+iq_min(iq_max < 0) = iq_max(iq_max < 0);
+
+ip_inj = min(ip_inj,ip_max);
+ip_inj = max(ip_inj,ip_min);
+
+iq_inj = min(iq_inj,iq_max);
+iq_inj = max(iq_inj,iq_min);
+
+%-----------------------------------------------------------------%
+% rate limiting and reec protection logic
 
 if (flag == 2 || flag == 3)  % dynamics calculation
     % determining the appropriate time constant
@@ -83,6 +150,115 @@ if (flag == 2 || flag == 3)  % dynamics calculation
     else
         h_sol = varargin{1};
     end
+
+    %-------------------------------------------------------------%
+    % reec protection logic
+
+    if (g.reec.n_reec ~= 0)
+        % passing iq limits back to the reec controls
+        g.reec.iqmin = iq_min;
+        g.reec.iqmax = iq_max;
+
+        %---------------------------------------------------------%
+        % voltage dip logic
+
+        % vt_filt > vdiph or vt_filt < vdipl
+        mask = (g.reec.reec1(:,k) > g.reec.reec_con(:,3)) ...
+               | (g.reec.reec1(:,k) < g.reec.reec_con(:,4));
+
+        if any(mask)
+            g.reec.vdip(mask) = true;
+            g.reec.vdip_tick(mask) = k;
+            g.reec.vdip_time(mask) = 0;
+        end
+
+        % recovery stage
+        mask = g.reec.vdip ...
+               & (g.reec.reec1(:,k) <= g.reec.reec_con(:,3)) ...
+               & (g.reec.reec1(:,k) >= g.reec.reec_con(:,4));
+
+        if any(mask)
+            % r_mask -- check for recovery transition, store vdip_icmd
+            r_mask = mask & (g.reec.vdip_time == 0);
+            if any(r_mask)
+                iq_hld = iq_inj;
+                qfrz_mask = (g.reec.reec_con(:,12) < 0);
+                iq_hld(qfrz_mask) = g.reec.reec_con(qfrz_mask, 11);
+                g.reec.vdip_icmd(r_mask) = ip_inj(r_mask) + 1j*iq_hld(r_mask);
+            end
+
+            % q_mask -- hold the reactive current until thldq
+            q_mask = mask & (g.reec.vdip_time <= abs(g.reec.reec_con(:,12)));
+            iq_inj(q_mask) = imag(g.reec.vdip_icmd(q_mask));
+
+            % p_mask -- hold the active current until thldp
+            p_mask = mask & (g.reec.vdip_time <= g.reec.reec_con(:,13));
+            ip_inj(p_mask) = real(g.reec.vdip_icmd(p_mask));
+
+            % t_mask -- track the time since recovering
+            t_mask = mask & (g.reec.vdip_tick < k);
+            if any(t_mask)
+                g.reec.vdip_tick(t_mask) = k;
+                g.reec.vdip_time(t_mask) = g.reec.vdip_time(t_mask) + h_sol;
+            end
+
+            % s_mask -- check the reset condition
+            s_mask = mask & (g.reec.vdip_time > max(abs(g.reec.reec_con(:,12)), ...
+                                                    g.reec.reec_con(:,13)));
+
+            if any(s_mask)
+                g.reec.vdip(s_mask) = false;
+                g.reec.vdip_tick(s_mask) = -1;
+                g.reec.vdip_time(s_mask) = 0;
+                g.reec.vdip_icmd(s_mask) = 0;
+            end
+        end
+
+        %---------------------------------------------------------%
+        % voltage blocking logic
+
+        mask = (g.reec.reec1(:,k) > g.reec.reec_con(:,40)) ...
+               | (g.reec.reec1(:,k) < g.reec.reec_con(:,41));
+
+        if any(mask)
+            ip_inj(mask) = 0;
+            iq_inj(mask) = 0;
+
+            g.reec.vblk(mask) = true;
+            g.reec.vblk_tick(mask) = k;
+            g.reec.vblk_time(mask) = 0;
+        end
+
+        % blocking timer
+        mask = g.reec.vblk ...
+               & (g.reec.reec1(:,k) <= g.reec.reec_con(:,40)) ...
+               & (g.reec.reec1(:,k) >= g.reec.reec_con(:,41));
+
+        if any(mask)
+            % b_mask -- block the current command until tblkdelay
+            b_mask = mask & (g.reec.vblk_time <= g.reec.reec_con(:,42));
+            ip_inj(b_mask) = 0;
+            iq_inj(b_mask) = 0;
+
+            % t_mask -- track the time since recovering
+            t_mask = mask & (g.reec.vblk_tick < k);
+            if any(t_mask)
+                g.reec.vblk_tick(t_mask) = k;
+                g.reec.vblk_time(t_mask) = g.reec.vblk_time(t_mask) + h_sol;
+            end
+
+            % s_mask -- check the reset condition
+            s_mask = mask & (g.reec.vblk_time > g.reec.reec_con(:,42));
+            if any(s_mask)
+                g.reec.vblk(s_mask) = false;
+                g.reec.vblk_tick(s_mask) = -1;
+                g.reec.vblk_time(s_mask) = 0;
+            end
+        end
+    end
+
+    %-------------------------------------------------------------%
+    % rate limiting
 
     rate_time_con = g.ess.ess_con(:,14);
     rate_time_con(rate_time_con < lbnd) = h_sol;
@@ -125,7 +301,7 @@ b_inter = -i_lvpl1.*v_zerox./(v_break - v_zerox);
 
 ip_lvpl_ub = i_lvpl1;
 
-mask = (v_term < v_break);                        % linear roll-off
+mask = (v_term < v_break) & (i_lvpl1 > 0);        % linear roll-off
 if any(mask)
     ip_lvpl_ub(mask) = a_slope(mask).*max(v_term(mask),0) + b_inter(mask);
 
@@ -147,8 +323,8 @@ iq_pf_ub = g.ess.ess_pot(:,3);                    % initializing the bound
 
 mask = (g.ess.ess_con(:,10) ~= 0);
 if any(mask)
-    iq_pf_ub(mask) = ...
-        sqrt((ip_inj(mask)./g.ess.ess_con(mask,10)).^2 - ip_inj(mask).^2);
+    iq_pf_ub(mask) = sqrt((ip_inj(mask)./g.ess.ess_con(mask,10)).^2 ...
+                          - ip_inj(mask).^2);
 end
 
 iq_pf_lb = -iq_pf_ub;                             % symmetric limits

@@ -93,13 +93,6 @@ if (nargout > 2)  % checking number of output arguments
         bus_sol(j,7) = (ones(g.ncl.n_load,1) - g.ncl.load_con(:,3) ...
                         - g.ncl.load_con(:,5)).*bus_sol(j,7);
 
-        % uncomment if ess injections are specified as generation
-        % if (g.ess.n_ess ~= 0)
-        %     j_ess = g.bus.bus_int(g.ess.ess_con(:,2));
-        %     bus_sol(j_ess,6) = bus_sol(j_ess,4);
-        %     bus_sol(j_ess,7) = bus_sol(j_ess,5);
-        % end
-
         if (g.dc.n_conv ~= 0)
             % remove dc loads from LT bus
             bus_sol(g.dc.ac_bus,6) = zeros(g.dc.n_conv,1);

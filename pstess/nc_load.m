@@ -134,6 +134,11 @@ if ~isempty(g.ncl.load_con)
             Y22(j,j) = Y22(j,j) + 1j*diag(g.rlmod.rlmod_st(:,k));
         end
 
+        if ((g.trip.enable) && (g.trip.n_trip_ncl ~= 0))
+            j = g.trip.bus_lshed_idx(g.trip.bus_lshed_type);
+            Y22(j,j) = Y22(j,j) + diag(g.trip.load_trip_ncl(:,k));  % complex
+        end
+
         % pwrmod (modifies load_pot to account for modulation)
         if (g.pwr.n_pwrmod ~= 0)
             for index = 1:g.pwr.n_pwrmod

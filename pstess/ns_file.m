@@ -7,6 +7,10 @@
 % Version history
 %
 % Author:   Ryan Elliott
+% Modified: September 2023
+% Note:     Added support for ivm, gfma, and reec models
+%
+% Author:   Ryan Elliott
 % Modified: August 2019
 % Note:     ess model added
 %
@@ -60,6 +64,30 @@ for k = 1:g.mac.n_mac
             k_sub = find(g.mac.mac_sub_idx == k);
             if ~isempty(k_sub)
                 state(k) = nss.mac_sub;
+            end
+        end
+
+        % internal voltage models (ivm)
+        if ~isempty(g.mac.mac_ivm_idx)
+            k_ivm = find(g.mac.mac_ivm_idx == k);
+            if ~isempty(k_ivm)
+                state(k) = nss.mac_ivm;
+
+                % preventing mac_ang bypass
+                if (g.mac.mac_con(k,9) < lbnd)
+                    g.mac.mac_con(k,9) = 5*lbnd;
+                    estr = '\nsvm_mgen: increasing ivm commanded angle time ';
+                    estr = [estr, 'constant to be nonzero at ivm index %0.0f.'];
+                    warning(sprintf(estr,k-length(g.mac.not_ivm_idx)));
+                end
+
+                % preventing eqprime bypass
+                if (g.mac.mac_con(k,10) < lbnd)
+                    g.mac.mac_con(k,10) = 5*lbnd;
+                    estr = '\nsvm_mgen: increasing ivm commanded voltage time ';
+                    estr = [estr, 'constant to be nonzero at ivm index %0.0f.'];
+                    warning(sprintf(estr,k-length(g.mac.not_ivm_idx)));
+                end
             end
         end
     end
@@ -302,15 +330,17 @@ if (g.ess.n_ess ~= 0)
         state_ess(kk) = 3;                                  % non-bypassable states
 
         if (g.ess.ess_con(kk,3) < lbnd)
-            estr = '\nsvm_mgen: ess voltage transducer time constant ';
-            estr = [estr, 'must be nonzero at ess index %0.0f.'];
-            error(sprintf(estr,kk));
+            g.ess.ess_con(kk,3) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing ess voltage transducer time ';
+            estr = [estr, 'constant to be nonzero at ess index %0.0f.'];
+            warning(sprintf(estr,kk));
         end
 
         if (g.ess.ess_con(kk,14) < lbnd)
-            estr = '\nsvm_mgen: ess converter interface time constant ';
-            estr = [estr, 'must be nonzero at ess index %0.0f.'];
-            error(sprintf(estr,kk));
+            g.ess.ess_con(kk,14) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing ess converter interface time ';
+            estr = [estr, 'constant to be nonzero at ess index %0.0f.'];
+            warning(sprintf(estr,kk));
         end
 
         % local voltage magnitude Pade approximation
@@ -331,19 +361,27 @@ if (g.lsc.n_lsc ~= 0)
     for kk = 1:g.lsc.n_lsc
         state_lsc(kk) = 7;                                  % non-bypassable states
 
+        if (g.lsc.lsc_con(kk,3) < lbnd)
+            g.lsc.lsc_con(kk,3) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing lsc angle transducer time ';
+            estr = [estr, 'constant to be nonzero at lsc index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
         if (g.lsc.lsc_con(kk,34) < lbnd)
-            estr = '\nsvm_mgen: lsc lowpass filter time constant ';
-            estr = [estr, 'must be nonzero at lsc index %0.0f.'];
-            error(sprintf(estr,kk));
+            g.lsc.lsc_con(kk,34) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing lsc lowpass filter time ';
+            estr = [estr, 'constant to be nonzero at lsc index %0.0f.'];
+            warning(sprintf(estr,kk));
         end
 
         % remote angle Pade approximation
-        if ((g.lsc.lsc_con(kk,4) ~= 0) && (g.lsc.lsc_con(kk,5)/2 >= lbnd))
+        if ((g.lsc.lsc_con(kk,4) == 1) && (g.lsc.lsc_con(kk,5)/2 >= lbnd))
             state_lsc(kk) = state_lsc(kk) + 1;
         end
 
         % local angle Pade approximation
-        if ((g.lsc.lsc_con(kk,4) ~= 0) && (g.lsc.lsc_con(kk,6)/2 >= lbnd))
+        if ((g.lsc.lsc_con(kk,4) == 1) && (g.lsc.lsc_con(kk,6)/2 >= lbnd))
             state_lsc(kk) = state_lsc(kk) + 1;
         end
 
@@ -356,6 +394,157 @@ if (g.lsc.n_lsc ~= 0)
 
     n_lsc_states = sum(state_lsc);
     state(n_lsc1+1:n_lsc1+g.lsc.n_lsc) = state_lsc;
+end
+
+% reec
+n_reec_states = 0;
+n_reec1 = n_lsc1 + g.lsc.n_lsc;
+if (g.reec.n_reec ~= 0)
+    state_reec = zeros(g.reec.n_reec,1);
+    for kk = 1:g.reec.n_reec
+        state_reec(kk) = 5;                                 % non-bypassable states
+
+        % eliminating deadbands from the local voltage control loop
+        if ((g.reec.reec_con(kk,6) ~= 0) || (g.reec.reec_con(kk,7) ~= 0))
+            g.reec.reec_con(kk,6) = 0;
+            g.reec.reec_con(kk,7) = 0;
+            estr = '\nsvm_mgen: eliminating local voltage control deadband ';
+            estr = [estr, 'at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % reec 1 -- terminal voltage transducer, reec_con(,5) is trv
+        if (g.reec.reec_con(kk,5) < lbnd)
+            g.reec.reec_con(kk,5) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing reec voltage transducer time ';
+            estr = [estr, 'constant trv to be nonzero at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % reec2 -- active power transducer is present if pfflag == 1
+        if (g.reec.reec_con(kk,32) == 1)
+            state_reec(kk) = state_reec(kk) + 1;
+
+            if (g.reec.reec_con(kk,14) < lbnd)
+                g.reec.reec_con(kk,14) = 5*lbnd;
+                estr = '\nsvm_mgen: increasing reec active power filter time ';
+                estr = [estr, 'constant tp to be nonzero at reec index %0.0f.'];
+                warning(sprintf(estr,kk));
+            end
+        end
+
+        % reec3 -- reactive power transducer, reec_con(,15) is tq
+        if (g.reec.reec_con(kk,15) < lbnd)
+            g.reec.reec_con(kk,15) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing reec reactive power transducer time ';
+            estr = [estr, 'constant tq to be nonzero at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % reec4 -- first stage PI loop is present if vflag == 1 and qflag == 1
+        if ((g.reec.reec_con(kk,33) == 1) && (g.reec.reec_con(kk,34) == 1))
+            if (g.reec.reec_con(kk,22) > 0)
+                state_reec(kk) = state_reec(kk) + 1;
+            end
+        end
+
+        % reec5 -- second stage PI loop is present if qflag == 1
+        if ((g.reec.reec_con(kk,34) == 1) && (g.reec.reec_con(kk,24) > 0))
+            state_reec(kk) = state_reec(kk) + 1;
+        end
+
+        % reec6 -- reactive current filter is present if qflag == 0
+        if ((g.reec.reec_con(kk,34) == 0) && (g.reec.reec_con(kk,25) >= lbnd))
+            state_reec(kk) = state_reec(kk) + 1;
+        end
+
+        % reec7 -- active power order filter, reec_con(,30) is tpord
+        if (g.reec.reec_con(kk,30) < lbnd)
+            g.reec.reec_con(kk,30) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing reec active power order time ';
+            estr = [estr, 'constant tpord to be nonzero at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % reec8 -- voltage compensation filter, reec_con(,38) is tr1
+        if (g.reec.reec_con(kk,38) >= lbnd)
+            state_reec(kk) = state_reec(kk) + 1;
+        end
+
+        % reec9 -- active current command filter, reec_con(,43) is tipc
+        if (g.reec.reec_con(kk,43) < lbnd)
+            g.reec.reec_con(kk,43) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing reec active current order time ';
+            estr = [estr, 'constant to be nonzero at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % reec10 -- reactive current command filter, reec_con(,44) is tiqc
+        if (g.reec.reec_con(kk,44) < lbnd)
+            g.reec.reec_con(kk,44) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing reec reactive current order time ';
+            estr = [estr, 'constant to be nonzero at reec index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+    end
+
+    n_reec_states = sum(state_reec);
+    state(n_reec1+1:n_reec1+g.reec.n_reec) = state_reec;
+end
+
+% gfma
+n_gfma_states = 0;
+n_gfma1 = n_reec1 + g.reec.n_reec;
+if (g.gfma.n_gfma ~= 0)
+    state_gfma = zeros(g.gfma.n_gfma,1);
+    for kk = 1:g.gfma.n_gfma
+        state_gfma(kk) = 5;                                 % non-bypassable states
+
+        % note: overload mitigation states not included in linearization;
+        %       this includes gfma2, gfma3, gfma6, gfma7
+
+        % gfma1 -- commanded voltage angle integrator is not bypassable
+
+        % gfma4 -- commanded voltage magnitude time constant
+        if (g.gfma.gfma_con(kk,14) < lbnd)
+            g.gfma.gfma_con(kk,14) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing gfma voltage magnitude time ';
+            estr = [estr, 'constant to be nonzero at gfma index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % gfma5 -- voltage regulation integral state present if vflag == 1
+        if ((g.gfma.gfma_con(kk,25) == 1) && (g.gfma.gfma_con(kk,13) > 0))
+            state_gfma(kk) = state_gfma(kk) + 1;
+        end
+
+        % gfma8 -- inverter active power transducer
+        if (g.gfma.gfma_con(kk,21) < lbnd)
+            g.gfma.gfma_con(kk,21) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing gfma active power transducer time ';
+            estr = [estr, 'constant to be nonzero at gfma index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % gfma9 -- inverter reactive power transducer
+        if (g.gfma.gfma_con(kk,22) < lbnd)
+            g.gfma.gfma_con(kk,22) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing gfma reactive power transducer time ';
+            estr = [estr, 'constant to be nonzero at gfma index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+
+        % gfma10 -- inverter voltage transducer
+        if (g.gfma.gfma_con(kk,23) < lbnd)
+            g.gfma.gfma_con(kk,23) = 5*lbnd;
+            estr = '\nsvm_mgen: increasing gfma voltage mag. transducer time ';
+            estr = [estr, 'constant to be nonzero at gfma index %0.0f.'];
+            warning(sprintf(estr,kk));
+        end
+    end
+
+    n_gfma_states = sum(state_gfma);
+    state(n_gfma1+1:n_gfma1+g.gfma.n_gfma) = state_gfma;
 end
 
 % eof

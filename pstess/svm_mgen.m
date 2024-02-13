@@ -7,14 +7,20 @@
 %
 %     B matrices
 %       for a change in Exciter Vref in b_vr
-%       for a change in Turbine governer Pref b_pr
+%       for a change in Turbine governor Pref b_pr
 %       for a change in generator mechanical torque b_pm
 %       for a change in svc reference voltage b_svc
 %       for a change in tcsc input b_tcsc
 %       for a change in active power modulation b_lmod
 %       for a change in reactive load modulation b_rlmod
-%       for a change in real power modulation b_pwrmod_p
-%       for a change in real power modulation b_pwrmod_q
+%       for a change in active power modulation b_pwrmod_p
+%       for a change in reactive power modulation b_pwrmod_q
+%       for a change in ess active power reference b_ess_p
+%       for a change in ess reactive power reference b_ess_q
+%       for a change in reec voltage reference b_reec_v
+%       for a change in reec reactive power reference b_reec_q
+%       for a change in gfma active power reference b_gfma_p
+%       for a change in gfma reactive power reference b_gfma_q
 %
 %     C matrices
 %       change in generator speed c_spd
@@ -32,6 +38,12 @@
 %       change in to bus real current c_ilrt
 %       change in from bus imaginary current c_ilif
 %       change in to bus imaginary current c_ilit
+%       change in ess active power command c_ess_p
+%       change in ess reactive power command c_ess_q
+%       change in reec measured terminal voltage c_reec_v
+%       change in reec measured reactive power c_reec_q
+%       change in gfma measured real power c_gfma_p
+%       change in gfma measured reactive power c_gfma_q
 %
 %     D matrices
 %       combination of output and input, e.g.,
@@ -53,6 +65,10 @@
 
 %-----------------------------------------------------------------------------%
 % Version history
+%
+% Author:  Ryan Elliott
+% Date:    September 2023
+% Purpose: added support for ivm, reec, and gfma models
 %
 % Author:  Ryan Elliott
 % Date:    July 2020
@@ -133,7 +149,7 @@ else
 end
 
 % check for valid dynamic data file
-if isempty(g.mac.mac_con)
+if (isempty(g.mac.mac_con) && isempty(g.ivm.ivm_con))
     error('svm_mgen: the selected file is not a valid data file (mac_con).');
 end
 
@@ -201,18 +217,36 @@ else
     load('sim_fle');
 end
 
+% adjusting bus matrix for ess instances specified as generation
+if ~isempty(g.ess.ess_con)
+    j_ess = g.bus.bus_int(g.ess.ess_con(:,2));
+
+    mask = (bus(j_ess,10) ~= 3);
+    if any(mask)
+        bus(j_ess(mask),6) = -bus(j_ess(mask),4);
+        bus(j_ess(mask),7) = -bus(j_ess(mask),5);
+        bus(j_ess(mask),4) = 0.0;
+        bus(j_ess(mask),5) = 0.0;
+    end
+end
+
 g.exc.n_exc = 0;
-g.exc.n_dc = 0;
 g.exc.n_smp = 0;
+g.exc.n_smppi = 0;
+g.exc.n_dc = 0;
+g.exc.n_dc1 = 0;
+g.exc.n_dc2 = 0;
 g.exc.n_st3 = 0;
 g.pss.n_pss = 0;
 g.dpw.n_dpw = 0;
 g.tg.n_tg = 0;
 g.tg.n_tgh = 0;
 g.tg.n_tg_tot = 0;
+g.gfma.n_gfma = 0;
 g.svc.n_svc = 0;
 g.tcsc.n_tcsc = 0;
 g.lsc.n_lsc = 0;
+g.reec.n_reec = 0;
 g.ess.n_ess = 0;
 g.lmod.n_lmod = 0;
 g.rlmod.n_rlmod = 0;
@@ -220,6 +254,7 @@ g.pwr.n_pwrmod = 0;
 
 % note: dc_indx() called in dc load flow (lfdcs)
 mac_indx();
+ivm_indx();
 
 % make sure bus max/min Q is the same as the pwrmod_con max/min Q
 if ~isempty(g.pwr.n_pwrmod)
@@ -239,11 +274,10 @@ n_gm = g.mac.n_mac + g.ind.n_mot;
 if (g.mac.n_ib ~= 0)
     % remove exciters
     if ~isempty(g.exc.exc_con)
-        g.exc.n_exc = length(g.exc.exc_con(:,1));
-        net_idx = zeros(g.exc.n_exc,1);
+        net_idx = zeros(length(g.exc.exc_con(:,1)),1);
         for j = 1:g.mac.n_ib
-            net_idx = (net_idx ...
-                       | g.exc.exc_con(:,2) == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
+            net_idx = (net_idx | g.exc.exc_con(:,2) ...
+                                 == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
         end
 
         if (length(net_idx) == 1)
@@ -257,33 +291,12 @@ if (g.mac.n_ib ~= 0)
         end
     end
 
-    % remove pss
-    if ~isempty(g.pss.pss_con)
-        g.pss.n_pss = length(g.pss.pss_con(:,1));
-        net_idx = zeros(g.pss.n_pss,1);
-        for j = 1:g.mac.n_ib
-            net_idx = (net_idx ...
-                       | g.pss.pss_con(:,2) == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
-        end
-
-        if (length(net_idx) == 1)
-            if (net_idx == 1)
-                g.pss.pss_con = [];
-            end
-        else
-            perm = diag(~net_idx);
-            perm = perm(~net_idx,:);
-            g.pss.pss_con = perm*g.pss.pss_con;
-        end
-    end
-
     % remove dpw filters
     if ~isempty(g.dpw.dpw_con)
-        g.dpw.n_dpw = length(g.dpw.dpw_con(:,1));
-        net_idx = zeros(g.dpw.n_dpw,1);
+        net_idx = zeros(length(g.dpw.dpw_con(:,1)),1);
         for j = 1:g.mac.n_ib
-            net_idx = (net_idx ...
-                       | g.dpw.dpw_con(:,1) == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
+            net_idx = (net_idx | g.dpw.dpw_con(:,1) ...
+                                 == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
         end
 
         if (length(net_idx) == 1)
@@ -297,13 +310,31 @@ if (g.mac.n_ib ~= 0)
         end
     end
 
+    % remove pss
+    if ~isempty(g.pss.pss_con)
+        net_idx = zeros(length(g.pss.pss_con(:,1)),1);
+        for j = 1:g.mac.n_ib
+            net_idx = (net_idx | g.pss.pss_con(:,2) ...
+                                 == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
+        end
+
+        if (length(net_idx) == 1)
+            if (net_idx == 1)
+                g.pss.pss_con = [];
+            end
+        else
+            perm = diag(~net_idx);
+            perm = perm(~net_idx,:);
+            g.pss.pss_con = perm*g.pss.pss_con;
+        end
+    end
+
     % remove turbine governors
     if ~isempty(g.tg.tg_con)
-        g.tg.n_tg = length(g.tg.tg_con(:,1));
-        net_idx = zeros(g.tg.n_tg,1);
+        net_idx = zeros(length(g.tg.tg_con(:,1)),1);
         for j = 1:g.mac.n_ib
-            net_idx = (net_idx ...
-                       | g.tg.tg_con(:,2) == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
+            net_idx = (net_idx | g.tg.tg_con(:,2) ...
+                                 == g.mac.mac_con(g.mac.mac_ib_idx(j),1));
         end
 
         if (length(net_idx) == 1)
@@ -314,6 +345,25 @@ if (g.mac.n_ib ~= 0)
             perm = diag(~net_idx);
             perm = perm(~net_idx,:);
             g.tg.tg_con = perm*g.tg.tg_con;
+        end
+    end
+
+    % remove gfma controllers
+    if ~isempty(g.gfma.gfma_con)
+        net_idx = zeros(length(g.gfma.gfma_con(:,1)),1);
+        for j = 1:g.mac.n_ib
+            net_idx = (net_idx | g.gfma.gfma_con(:,2) ...
+                                 == g.mac.mac_con(g.mac.mac_ib_idx(j),2));
+        end
+
+        if (length(net_idx) == 1)
+            if (net_idx == 1)
+                g.gfma.gfma_con = [];
+            end
+        else
+            perm = diag(~net_idx);
+            perm = perm(~net_idx,:);
+            g.gfma.gfma_con = perm*g.gfma.gfma_con;
         end
     end
 end
@@ -327,15 +377,6 @@ else
     g.exc.n_exc = 0;
 end
 
-% identify pss
-mac_pss = 0;
-if ~isempty(g.pss.pss_con)
-    pss_indx();
-    mac_pss = g.mac.mac_int(g.pss.pss_con(:,2));
-else
-    g.pss.n_pss = 0;
-end
-
 % identify dpw filters
 mac_dpw = 0;
 if ~isempty(g.dpw.dpw_con)
@@ -343,6 +384,15 @@ if ~isempty(g.dpw.dpw_con)
     mac_dpw = g.mac.mac_int(g.dpw.dpw_con(:,1));
 else
     g.dpw.n_dpw = 0;
+end
+
+% identify pss
+mac_pss = 0;
+if ~isempty(g.pss.pss_con)
+    pss_indx();
+    mac_pss = g.mac.mac_int(g.pss.pss_con(:,2));
+else
+    g.pss.n_pss = 0;
 end
 
 % identify turbine governors
@@ -356,6 +406,15 @@ else
     g.tg.n_tg = 0;
     g.tg.n_tgh = 0;
     g.tg.n_tg_tot = 0;
+end
+
+% identify gfma controllers
+if ~isempty(g.gfma.gfma_con)
+    gfma_indx();
+else
+    g.gfma.n_gfma = 0;
+    g.gfma.ivm_idx = [];
+    g.gfma.mac_idx = [];
 end
 
 % identify svc
@@ -381,6 +440,14 @@ else
     g.lsc.n_lsc = 0;
     g.lsc.n_sensor = 0;
     g.lsc.lsc_idx = [];
+end
+
+% identify reec
+if ~isempty(g.reec.reec_con)
+    reec_indx();
+else
+    g.reec.n_reec = 0;
+    g.reec.ess_idx = [];
 end
 
 % identify ess
@@ -419,7 +486,7 @@ g.bus.n_bus = n_bus;
 %-----------------------------------------------------------------------------%
 % variable declarations
 
-k = 4;
+k = 4;                     %
 n_kfd = k;                 % total number of finite-difference data points
 kdc = 10*k + 1;            % configuring indexing for hvdc
 k_inc = 1;                 %
@@ -546,14 +613,13 @@ g.mac.cur_re = z;
 g.mac.cur_im = z;
 g.mac.psi_re = z;
 g.mac.psi_im = z;
-%
-g.mac.mac_ang = z;
+g.mac.mac_ang = z;   % states
 g.mac.mac_spd = z;
 g.mac.edprime = z;
 g.mac.eqprime = z;
 g.mac.psikd = z;
 g.mac.psikq = z;
-g.mac.dmac_ang = z;
+g.mac.dmac_ang = z;  % state derivatives
 g.mac.dmac_spd = z;
 g.mac.dedprime = z;
 g.mac.deqprime = z;
@@ -628,6 +694,47 @@ g.exc.dR_f = ze;
 g.exc.exc_sig = ze;
 g.exc.pss_out = ze;
 
+% ivm models
+xivm_dc.s{1} = zeros(max(g.ivm.n_ivmud,1),k);  % user-defined states
+
+if (g.ivm.n_ivmud ~= 0)
+    error('svm_mgen: user-defined ivm controllers not allowed.');
+end
+
+% gfma controllers
+z_gfma = zeros(max(g.gfma.n_gfma,1),k);
+o_gfma = ones(max(g.gfma.n_gfma,1),k);
+
+g.gfma.gfma1 = z_gfma;
+g.gfma.gfma2 = z_gfma;
+g.gfma.gfma3 = z_gfma;
+g.gfma.gfma4 = z_gfma;
+g.gfma.gfma5 = z_gfma;
+g.gfma.gfma6 = z_gfma;
+g.gfma.gfma7 = z_gfma;
+g.gfma.gfma8 = z_gfma;
+g.gfma.gfma9 = z_gfma;
+g.gfma.gfma10 = z_gfma;
+
+g.gfma.dgfma1 = z_gfma;
+g.gfma.dgfma2 = z_gfma;
+g.gfma.dgfma3 = z_gfma;
+g.gfma.dgfma4 = z_gfma;
+g.gfma.dgfma5 = z_gfma;
+g.gfma.dgfma6 = z_gfma;
+g.gfma.dgfma7 = z_gfma;
+g.gfma.dgfma8 = z_gfma;
+g.gfma.dgfma9 = z_gfma;
+g.gfma.dgfma10 = z_gfma;
+
+g.gfma.gfma_sig = z_gfma;
+
+g.gfma.pset = o_gfma;
+g.gfma.qset = o_gfma;
+g.gfma.vset = o_gfma;
+g.gfma.lim_flag = false(max(g.gfma.n_gfma,1),1);
+
+% induction motors
 g.ind.t_mot = zm;
 g.ind.p_mot = zm;
 g.ind.q_mot = zm;
@@ -639,6 +746,7 @@ g.ind.dvdp = zm;
 g.ind.dvqp = zm;
 g.ind.dslip = zm;
 
+% induction generators
 g.igen.tmig = zig;
 g.igen.pig = zig;
 g.igen.qig = zig;
@@ -657,7 +765,7 @@ if (g.svc.n_svc ~= 0)
     g.svc.svc_dsig = zeros(g.svc.n_svc,k);
     g.svc.B_con = zeros(g.svc.n_svc,k);
     g.svc.dB_con = zeros(g.svc.n_svc,k);
-    %
+
     if (g.svc.n_svcud ~= 0)
         error('svm_mgen: user-defined svc damping control not allowed.');
     else
@@ -671,7 +779,7 @@ else
     g.svc.svc_dsig = zeros(1,k);
     g.svc.B_con = zeros(1,k);
     g.svc.dB_con = zeros(1,k);
-    %
+
     xsvc_dc = zeros(1,k);
     dxsvc_dc = zeros(1,k);
     d_sig = zeros(1,k);
@@ -682,7 +790,7 @@ if (g.tcsc.n_tcsc ~= 0)
     g.tcsc.dB_tcsc = zeros(g.tcsc.n_tcsc,k);
     g.tcsc.tcsc_sig = zeros(g.tcsc.n_tcsc,k);
     g.tcsc.tcsc_dsig = zeros(g.tcsc.n_tcsc,k);
-    %
+
     if (g.tcsc.n_tcscud ~= 0)
         error('svm_mgen: user-defined tcsc damping control not allowed.');
     else
@@ -694,7 +802,7 @@ else
     g.tcsc.dB_tcsc = zeros(1,k);
     g.tcsc.tcsc_sig = zeros(1,k);
     g.tcsc.tcsc_dsig = zeros(1,k);
-    %
+
     xtcsc_dc = zeros(1,k);
     dxtcsc_dc = zeros(1,k);
     td_sig = zeros(1,k);
@@ -702,7 +810,7 @@ end
 
 % lsc variable declarations
 z_lsc = zeros(max(g.lsc.n_lsc,1),k);
-%
+
 g.lsc.lsc1 = z_lsc;
 g.lsc.lsc2 = z_lsc;
 g.lsc.lsc3 = z_lsc;
@@ -718,7 +826,7 @@ g.lsc.lsc12 = z_lsc;
 g.lsc.lsc13 = z_lsc;
 g.lsc.lsc14 = z_lsc;
 g.lsc.lsc15 = z_lsc;
-%
+
 g.lsc.dlsc1 = z_lsc;
 g.lsc.dlsc2 = z_lsc;
 g.lsc.dlsc3 = z_lsc;
@@ -734,29 +842,78 @@ g.lsc.dlsc12 = z_lsc;
 g.lsc.dlsc13 = z_lsc;
 g.lsc.dlsc14 = z_lsc;
 g.lsc.dlsc15 = z_lsc;
-%
+
 g.lsc.theta_sensor = zeros(max(g.lsc.n_sensor,1),k);
 g.lsc.theta_coi_pade = z_lsc;
 g.lsc.theta_lsc_pade = z_lsc;
 % g.lsc.theta_coi_del = z_lsc;  % for shift-register delay model
-%
+
 g.lsc.lsc_scmd = z_lsc;
+
+% reec variable declarations
+z_reec = zeros(max(g.reec.n_reec,1),k);
+o_reec = ones(max(g.reec.n_reec,1),k);
+
+g.reec.reec1 = z_reec;                        % states
+g.reec.reec2 = z_reec;
+g.reec.reec3 = z_reec;
+g.reec.reec4 = z_reec;
+g.reec.reec5 = z_reec;
+g.reec.reec6 = z_reec;
+g.reec.reec7 = z_reec;
+g.reec.reec8 = z_reec;
+g.reec.reec9 = z_reec;
+g.reec.reec10 = z_reec;
+
+g.reec.dreec1 = z_reec;                       % derivatives
+g.reec.dreec2 = z_reec;
+g.reec.dreec3 = z_reec;
+g.reec.dreec4 = z_reec;
+g.reec.dreec5 = z_reec;
+g.reec.dreec6 = z_reec;
+g.reec.dreec7 = z_reec;
+g.reec.dreec8 = z_reec;
+g.reec.dreec9 = z_reec;
+g.reec.dreec10 = z_reec;
+
+g.reec.icmd = z_reec;                         % commands
+g.reec.paux = z_reec;
+g.reec.reec_sig = z_reec;                     % modulation
+
+g.reec.iqmin = ones(max(g.reec.n_reec,1),1);
+g.reec.iqmax = ones(max(g.reec.n_reec,1),1);
+
+g.reec.pref = o_reec;                         % references
+g.reec.qref = o_reec;
+g.reec.pfaref = zeros(max(g.reec.n_reec,1),1);
+
+g.reec.vref0 = ones(max(g.reec.n_reec,1),1);
+g.reec.vref1 = ones(max(g.reec.n_reec,1),1);
+
+g.reec.vdip = false(max(g.reec.n_reec,1),1);
+g.reec.vdip_tick = -1*ones(max(g.reec.n_reec,1),1);
+g.reec.vdip_time = zeros(max(g.reec.n_reec,1),1);
+g.reec.vdip_icmd = zeros(max(g.reec.n_reec,1),1);
+
+g.reec.vblk = false(max(g.reec.n_reec,1),1);
+g.reec.vblk_tick = -1*ones(max(g.reec.n_reec,1),1);
+g.reec.vblk_time = zeros(max(g.reec.n_reec,1),1);
 
 % ess variable declarations
 z_ess = zeros(max(g.ess.n_ess,1),k);
-%
+
 g.ess.ess1 = z_ess;
 g.ess.ess2 = z_ess;
 g.ess.ess3 = z_ess;
 g.ess.ess4 = z_ess;
 g.ess.ess5 = z_ess;
-%
+
 g.ess.dess1 = z_ess;
 g.ess.dess2 = z_ess;
 g.ess.dess3 = z_ess;
 g.ess.dess4 = z_ess;
 g.ess.dess5 = z_ess;
-%
+
 g.ess.ess_cur = z_ess;
 g.ess.ess_soc = z_ess;
 g.ess.ess_vmag = z_ess;
@@ -769,8 +926,7 @@ g.ess.ess_sig = z_ess;
 g.ess.ess_dsig = z_ess;
 
 % ess user-defined control variable declarations
-z_essud = zeros(max(g.ess.n_essud,1),k);
-xess_dc.s{1} = z_essud;  % dynamic states
+xess_dc.s{1} = zeros(max(g.ess.n_essud,1),k);  % user-defined states
 
 if (g.ess.n_essud ~= 0)
     error('svm_mgen: user-defined ess controllers not allowed.');
@@ -801,7 +957,7 @@ if (g.pwr.n_pwrmod ~= 0)
     g.pwr.pwrmod_p_st = zeros(g.pwr.n_pwrmod,k);
     g.pwr.dpwrmod_p_st = g.pwr.pwrmod_p_st;
     g.pwr.pwrmod_p_sig = g.pwr.pwrmod_p_st;
-    %
+
     g.pwr.pwrmod_q_st = zeros(g.pwr.n_pwrmod,k);
     g.pwr.dpwrmod_q_st = g.pwr.pwrmod_q_st;
     g.pwr.pwrmod_q_sig = g.pwr.pwrmod_q_st;
@@ -809,20 +965,11 @@ else
     g.pwr.pwrmod_p_st = zeros(1,k);
     g.pwr.dpwrmod_p_st = g.pwr.pwrmod_p_st;
     g.pwr.pwrmod_p_sig = g.pwr.pwrmod_p_st;
-    %
+
     g.pwr.pwrmod_q_st = zeros(1,k);
     g.pwr.dpwrmod_q_st = g.pwr.pwrmod_q_st;
     g.pwr.pwrmod_q_sig = g.pwr.pwrmod_q_st;
 end
-
-% ivm model not yet added to linearization routine
-% if (g.mac.n_ivm ~= 0)
-%     g.mac.ivmmod_d_sig = zeros(g.mac.n_ivm,k);
-%     g.mac.ivmmod_e_sig = zeros(g.mac.n_ivm,k);
-% else
-%     g.mac.ivmmod_d_sig = zeros(1,k);
-%     g.mac.ivmmod_e_sig = zeros(1,k);
-% end
 
 g.sys.mach_ref = zeros(1,k);
 g.sys.sys_freq = ones(1,k);
@@ -841,6 +988,7 @@ disp('initializing svc, tcsc, lsc, ess, and hvdc models')
 bus = svc(0,1,bus,0);       % initialize svc models
 tcsc(0,1,0);                % initialize tcsc models
 lsc(0,1,bus,0);             % initialize lsc models
+reec(0,1,bus,0);            % initialize reec models
 ess(0,1,bus,0);             % initialize ess models
 dc_cont(0,1,1,bus,0);       % initialize hvdc control models
 
@@ -905,7 +1053,7 @@ disp('generators')
 mac_sub(0,1,bus,flag);
 mac_tra(0,1,bus,flag);
 mac_em(0,1,bus,flag);
-% mac_ivm(0,1,bus,flag);        % ivm model not yet added to linearization
+mac_ivm(0,1,bus,flag);
 mac_ib(0,1,bus,flag);
 
 disp('generator controls')
@@ -918,10 +1066,10 @@ exc_dc12(0,1,flag);
 tg(0,1,flag);
 tg_hydro(0,1,flag);
 
-% ivm model not yet added to linearization
-% s_simu contains ivm code at this point in the routine
+disp('ivm generator controls')
+gfma(0,1,bus,flag);
 
-% damping controls not permitted
+% user-defined controls not permitted
 
 % initialize load modulation control
 if ~isempty(g.lmod.lmod_con)
@@ -995,7 +1143,8 @@ tg_state = state;
 n_device_tot = g.mac.n_mac + g.ind.n_mot + g.igen.n_ig ...
                + g.svc.n_svc + g.tcsc.n_tcsc ...
                + g.lmod.n_lmod + g.rlmod.n_rlmod + 2*g.pwr.n_pwrmod ...
-               + g.dc.n_dcl + g.ess.n_ess + g.lsc.n_lsc;
+               + g.dc.n_dcl + g.ess.n_ess + g.lsc.n_lsc + g.reec.n_reec ...
+               + g.gfma.n_gfma;
 
 state = zeros(n_device_tot,1);
 max_state = nss.mac_max*g.mac.n_mac + nss.exc_max*g.exc.n_exc ...
@@ -1005,7 +1154,8 @@ max_state = nss.mac_max*g.mac.n_mac + nss.exc_max*g.exc.n_exc ...
             + nss.tcsc_max*g.tcsc.n_tcsc + nss.lmod_max*g.lmod.n_lmod ...
             + nss.rlmod_max*g.rlmod.n_rlmod + 2*nss.pwrmod_max*g.pwr.n_pwrmod ...
             + nss.dcl_max*g.dc.n_dcl + nss.ess_max*g.ess.n_ess ...
-            + nss.lsc_max*g.lsc.n_lsc;
+            + nss.lsc_max*g.lsc.n_lsc + nss.reec_max*g.reec.n_reec ...
+            + nss.gfma_max*g.gfma.n_gfma;
 
 % find total number of states
 run('ns_file');
@@ -1014,9 +1164,14 @@ NumStates = sum(state);
 % set dimensions for A matrix and permutation matrix
 a_mat = zeros(NumStates);
 p_mat = sparse(zeros(NumStates,max_state));
-c_spd = zeros(length(g.mac.not_ib_idx),NumStates);
-c_p = zeros(length(g.mac.not_ib_idx),NumStates);
-c_t = zeros(length(g.mac.not_ib_idx),NumStates);
+
+% set dimensions for generator C matrices
+c_curd = zeros(g.mac.n_mac,NumStates);
+c_curq = zeros(g.mac.n_mac,NumStates);
+c_spd = zeros(g.mac.n_mac,NumStates);
+c_pm = zeros(g.mac.n_mac,NumStates);
+c_p = zeros(g.mac.n_mac,NumStates);
+c_t = zeros(g.mac.n_mac,NumStates);
 
 % determine p_mat
 % converts the vector of length max_states to a column of a_mat or b
@@ -1040,7 +1195,7 @@ for kl = 2:n_kfd
         g.mac.eqprime(:,kl) = g.mac.eqprime(:,1);
         g.mac.psikd(:,kl) = g.mac.psikd(:,1);
         g.mac.psikq(:,kl) = g.mac.psikq(:,1);
-        %
+
         g.mac.pmech(:,kl) = g.mac.pmech(:,1);
         g.mac.telect(:,kl) = g.mac.telect(:,1);
         g.mac.pelect(:,kl) = g.mac.pelect(:,1);
@@ -1093,6 +1248,30 @@ for kl = 2:n_kfd
         g.tg.tg5(:,kl) = g.tg.tg5(:,1);
     end
 
+    if (g.gfma.n_gfma ~= 0)
+        g.gfma.gfma1(:,kl) = g.gfma.gfma1(:,1);
+        g.gfma.gfma2(:,kl) = g.gfma.gfma2(:,1);
+        g.gfma.gfma3(:,kl) = g.gfma.gfma3(:,1);
+        g.gfma.gfma4(:,kl) = g.gfma.gfma4(:,1);
+        g.gfma.gfma5(:,kl) = g.gfma.gfma5(:,1);
+        g.gfma.gfma6(:,kl) = g.gfma.gfma6(:,1);
+        g.gfma.gfma7(:,kl) = g.gfma.gfma7(:,1);
+        g.gfma.gfma8(:,kl) = g.gfma.gfma8(:,1);
+        g.gfma.gfma9(:,kl) = g.gfma.gfma9(:,1);
+        g.gfma.gfma10(:,kl) = g.gfma.gfma10(:,1);
+
+        g.gfma.dgfma1(:,kl) = g.gfma.dgfma1(:,1);
+        g.gfma.dgfma2(:,kl) = g.gfma.dgfma2(:,1);
+        g.gfma.dgfma3(:,kl) = g.gfma.dgfma3(:,1);
+        g.gfma.dgfma4(:,kl) = g.gfma.dgfma4(:,1);
+        g.gfma.dgfma5(:,kl) = g.gfma.dgfma5(:,1);
+        g.gfma.dgfma6(:,kl) = g.gfma.dgfma6(:,1);
+        g.gfma.dgfma7(:,kl) = g.gfma.dgfma7(:,1);
+        g.gfma.dgfma8(:,kl) = g.gfma.dgfma8(:,1);
+        g.gfma.dgfma9(:,kl) = g.gfma.dgfma9(:,1);
+        g.gfma.dgfma10(:,kl) = g.gfma.dgfma10(:,1);
+    end
+
     if (g.ind.n_mot ~= 0)
         g.ind.vdp(:,kl) = g.ind.vdp(:,1);
         g.ind.vqp(:,kl) = g.ind.vqp(:,1);
@@ -1121,7 +1300,7 @@ for kl = 2:n_kfd
         g.ess.ess3(:,kl) = g.ess.ess3(:,1);
         g.ess.ess4(:,kl) = g.ess.ess4(:,1);
         g.ess.ess5(:,kl) = g.ess.ess5(:,1);
-        %
+
         g.ess.dess1(:,kl) = g.ess.dess1(:,1);
         g.ess.dess2(:,kl) = g.ess.dess2(:,1);
         g.ess.dess3(:,kl) = g.ess.dess3(:,1);
@@ -1145,7 +1324,7 @@ for kl = 2:n_kfd
         g.lsc.lsc13(:,kl) = g.lsc.lsc13(:,1);
         g.lsc.lsc14(:,kl) = g.lsc.lsc14(:,1);
         g.lsc.lsc15(:,kl) = g.lsc.lsc15(:,1);
-        %
+
         g.lsc.dlsc1(:,kl) = g.lsc.dlsc1(:,1);
         g.lsc.dlsc2(:,kl) = g.lsc.dlsc2(:,1);
         g.lsc.dlsc3(:,kl) = g.lsc.dlsc3(:,1);
@@ -1163,6 +1342,30 @@ for kl = 2:n_kfd
         g.lsc.dlsc15(:,kl) = g.lsc.dlsc15(:,1);
     end
 
+    if (g.reec.n_reec ~= 0)
+        g.reec.reec1(:,kl) = g.reec.reec1(:,1);
+        g.reec.reec2(:,kl) = g.reec.reec2(:,1);
+        g.reec.reec3(:,kl) = g.reec.reec3(:,1);
+        g.reec.reec4(:,kl) = g.reec.reec4(:,1);
+        g.reec.reec5(:,kl) = g.reec.reec5(:,1);
+        g.reec.reec6(:,kl) = g.reec.reec6(:,1);
+        g.reec.reec7(:,kl) = g.reec.reec7(:,1);
+        g.reec.reec8(:,kl) = g.reec.reec8(:,1);
+        g.reec.reec9(:,kl) = g.reec.reec9(:,1);
+        g.reec.reec10(:,kl) = g.reec.reec10(:,1);
+
+        g.reec.dreec1(:,kl) = g.reec.dreec1(:,1);
+        g.reec.dreec2(:,kl) = g.reec.dreec2(:,1);
+        g.reec.dreec3(:,kl) = g.reec.dreec3(:,1);
+        g.reec.dreec4(:,kl) = g.reec.dreec4(:,1);
+        g.reec.dreec5(:,kl) = g.reec.dreec5(:,1);
+        g.reec.dreec6(:,kl) = g.reec.dreec6(:,1);
+        g.reec.dreec7(:,kl) = g.reec.dreec7(:,1);
+        g.reec.dreec8(:,kl) = g.reec.dreec8(:,1);
+        g.reec.dreec9(:,kl) = g.reec.dreec9(:,1);
+        g.reec.dreec10(:,kl) = g.reec.dreec10(:,1);
+    end
+
     if (g.lmod.n_lmod ~= 0)
         g.lmod.lmod_st(:,kl) = g.lmod.lmod_st(:,1);
     end
@@ -1174,7 +1377,7 @@ for kl = 2:n_kfd
     if (g.pwr.n_pwrmod ~= 0)
         g.pwr.pwrmod_p_st(:,kl) = g.pwr.pwrmod_p_st(:,1);
         g.pwr.pwrmod_q_st(:,kl) = g.pwr.pwrmod_q_st(:,1);
-        %
+
         g.pwr.pwrmod_p_sig(:,1) = g.pwr.pwrmod_p_st(:,1);
         g.pwr.pwrmod_q_sig(:,1) = g.pwr.pwrmod_q_st(:,1);
     end
@@ -1185,7 +1388,7 @@ for kl = 2:n_kfd
         g.dc.i_dcr(:,kl) = g.dc.i_dcr(:,1);
         g.dc.i_dci(:,kl) = g.dc.i_dci(:,1);
         g.dc.v_dcc(:,kl) = g.dc.v_dcc(:,1);
-        %
+
         g.dc.Vdc(:,kl) = g.dc.Vdc(:,1);
         g.dc.i_dc(:,kl) = g.dc.i_dc(:,1);
         g.dc.dc_sig(:,kl) = g.dc.dc_sig(:,1);
@@ -1197,9 +1400,11 @@ for kl = 2:n_kfd
     % specify the auxiliary inputs
     g.exc.exc_sig(:,kl) = g.exc.exc_sig(:,1);
     g.tg.tg_sig(:,kl) = g.tg.tg_sig(:,1);
+    g.gfma.gfma_sig(:,kl) = g.gfma.gfma_sig(:,1);
     g.svc.svc_sig(:,kl) = g.svc.svc_sig(:,1);
     g.tcsc.tcsc_sig(:,kl) = g.tcsc.tcsc_sig(:,1);
     g.ess.ess_sig(:,kl) = g.ess.ess_sig(:,1);
+    g.reec.reec_sig(:,kl) = g.reec.reec_sig(:,1);
     g.lmod.lmod_sig(:,kl) = g.lmod.lmod_sig(:,1);
     g.rlmod.rlmod_sig(:,kl) = g.rlmod.rlmod_sig(:,1);
     g.pwr.pwrmod_p_sig(:,kl) = g.pwr.pwrmod_p_sig(:,1);
@@ -1208,6 +1413,8 @@ end
 
 %-----------------------------------------------------------------------------%
 % perform perturbation of state variables
+
+not_ib_ivm_idx = g.mac.not_ib_idx(ismember(g.mac.not_ib_idx,g.mac.not_ivm_idx));
 
 run('p_cont');
 
@@ -1230,12 +1437,16 @@ end
 
 ang_idx = find(mac_state(:,2)==1);
 spd_idx = find(mac_state(:,2)==2);
-b_pm = zeros(NumStates,g.mac.n_mac-g.mac.n_ib);
-b_pm(ang_idx+1,:) = diag(0.5./g.mac.mac_con(g.mac.not_ib_idx,16));
+
+b_pm = zeros(NumStates,g.mac.n_mac);
+b_pm(spd_idx,not_ib_ivm_idx) = diag(0.5./g.mac.mac_con(not_ib_ivm_idx,16));
+
+st_vec = reshape(st_name.',numel(st_name),1);
+st_vec = st_vec(st_vec ~= 0);
 
 % Form transformation matrix to get rid of zero eigenvalue
 % Use generator 1 as reference and check for infinite buses
-if isempty(g.mac.ibus_con)
+if ~any(g.mac.ibus_con)
     if batch_mode
         ref_gen = 'n';
     else
@@ -1296,6 +1507,11 @@ if isempty(g.mac.ibus_con)
             b_vr = p_ang*b_vr;
         end
 
+        if (g.gfma.n_gfma ~= 0)
+            b_gfma_p = p_ang*b_gfma_p;
+            b_gfma_q = p_ang*b_gfma_q;
+        end
+
         if (g.svc.n_svc ~= 0)
             b_svc = p_ang*b_svc;
         end
@@ -1308,6 +1524,11 @@ if isempty(g.mac.ibus_con)
             b_ess = p_ang*b_ess;
         end
 
+        if (g.reec.n_reec ~= 0)
+            b_reec_v = p_ang*b_reec_v;
+            b_reec_q = p_ang*b_reec_q;
+        end
+
         if (g.lmod.n_lmod ~= 0)
             b_lmod = p_ang*b_lmod;
         end
@@ -1318,9 +1539,6 @@ if isempty(g.mac.ibus_con)
 
         if (g.pwr.n_pwrmod ~= 0)
             b_pwrmod_p = p_ang*b_pwrmod_p;
-        end
-
-        if (g.pwr.n_pwrmod ~= 0)
             b_pwrmod_q = p_ang*b_pwrmod_q;
         end
 
@@ -1406,14 +1624,14 @@ clear k_nib_idx k_rlmod k_row k_smp k_sub k_tg k_tgh k_tra kgs l_idx
 clear l_if1 l_if2 l_it1 l_it2 lf lfile line_flw line_par lmod_input
 clear mac_dpw mac_exc mac_pss mac_tg mac_tgh max_state maxu mot_state
 clear mu_idx n_hvdc1 n_hvdc_states n_ig_states n_mot ngt no_mac nominal
-clear not_TA not_TB not_TE not_TF not_TR not_ib ntdc ntf ntl ntpwr_p
-clear ntpwr_q ntrl nts nz_eig Pi Pr p_ang p_angi p_big p_mat p_max
-clear p_max_idx p_ratio pathname pert phi pr pr_input psi pss1_state
-clear pss2_state pss3_state pss_count pss_state Qi Qr R R_f_state rec_par
-clear ref_gen rlmod_input SHT s11 s12 s21 s22 s_TA s_TB s_TE s_TR s_idx
-clear sel st_name state state_hvdc state_lmod state_rlmod TA_state
-clear TB_state TR_state tg_count tg_number tg_state to_idx V0 V1 V2 VLT
-clear V_rgprf V_rncprf vnc vr_input X Y_gncprf Y_gprf Y_ncgprf Y_ncprf
-clear zero_eig
+clear not_TA not_TB not_TE not_TF not_TR not_ib not_ib_ivm_idx ntdc ntf
+clear ntl ntpwr_p ntpwr_q ntrl nts nz_eig Pi Pr p_ang p_angi p_big p_mat
+clear p_max p_max_idx p_ratio pathname pert phi pr pr_input psi
+clear pss1_state pss2_state pss3_state pss_count pss_state Qi Qr R
+clear R_f_state rec_par ref_gen rlmod_input SHT s11 s12 s21 s22 s_TA
+clear s_TB s_TE s_TR s_idx sel st_name state state_hvdc state_lmod
+clear state_rlmod TA_state TB_state TR_state tg_count tg_number tg_state
+clear to_idx V0 V1 V2 VLT V_rgprf V_rncprf vnc vr_input X Y_gncprf
+clear Y_gprf Y_ncgprf Y_ncprf zero_eig
 
 % eof

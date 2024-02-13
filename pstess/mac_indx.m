@@ -60,13 +60,17 @@ g.mac.not_ib_idx = (1:g.mac.n_mac)';
 g.mac.mac_ib_idx = [];
 
 if ~isempty(g.mac.ibus_con)
+    if (length(g.mac.ibus_con) ~= g.mac.n_mac)
+        error('mac_indx: the length of ibus_con does not match mac_con');
+    end
     g.mac.mac_ib_idx = find(g.mac.ibus_con == 1);
     g.mac.not_ib_idx = find(g.mac.ibus_con == 0);
     g.mac.n_ib = length(g.mac.mac_ib_idx);
 end
 
 % em has no xd or xq
-g.mac.mac_em_idx = find((g.mac.mac_con(:,6) == 0) & (g.mac.mac_con(:,16) ~= 0));
+g.mac.mac_em_idx = find(g.mac.mac_con(g.mac.not_ivm_idx,6) == 0);
+
 if ~isempty(g.mac.mac_em_idx)
     g.mac.n_em = length(g.mac.mac_em_idx);
 else
@@ -74,8 +78,8 @@ else
 end
 
 % tra has no xdpp
-g.mac.mac_tra_idx = find((g.mac.mac_con(:,6) ~= 0) & (g.mac.mac_con(:,8) == 0) ...
-                         & (g.mac.mac_con(:,16) ~= 0));
+g.mac.mac_tra_idx = find((g.mac.mac_con(g.mac.not_ivm_idx,6) ~= 0) ...
+                         & (g.mac.mac_con(g.mac.not_ivm_idx,8) == 0));
 
 if ~isempty(g.mac.mac_tra_idx)
     g.mac.n_tra = length(g.mac.mac_tra_idx);
@@ -84,39 +88,39 @@ else
 end
 
 % sub has xdpp
-g.mac.mac_sub_idx = find((g.mac.mac_con(:,8) ~= 0) & (g.mac.mac_con(:,16) ~= 0));
+g.mac.mac_sub_idx = find(g.mac.mac_con(g.mac.not_ivm_idx,8) ~= 0);
+
 if ~isempty(g.mac.mac_sub_idx)
     g.mac.n_sub = length(g.mac.mac_sub_idx);
 else
     g.mac.n_sub = 0;
 end
 
-% IVM generators
-g.mac.mac_ivm_idx = find(g.mac.mac_con(:,16) == 0);
-if ~isempty(g.mac.mac_ivm_idx)
-    g.mac.n_ivm = length(g.mac.mac_ivm_idx);
-else
-    g.mac.n_ivm = 0;
-end
+% ivm indexing handled in ivm_indx.m
+
+% finding non-ivm infinite bus generators
+mac_ib_idx = g.mac.mac_ib_idx(ismember(g.mac.mac_ib_idx,g.mac.not_ivm_idx));
 
 if (g.mac.n_ib ~= 0)
-    ib_em = find(g.mac.mac_con(g.mac.mac_ib_idx,6) == 0);
+    ib_em = find(g.mac.mac_con(mac_ib_idx,6) == 0);
+
     if ~isempty(ib_em)
-        g.mac.mac_ib_em = g.mac.mac_ib_idx(ib_em);
+        g.mac.mac_ib_em = mac_ib_idx(ib_em);
         g.mac.n_ib_em = length(ib_em);
     end
-    %
-    ib_tra = find((g.mac.mac_con(g.mac.mac_ib_idx,6) ~= 0) ...
-                  & (g.mac.mac_con(g.mac.mac_ib_idx,8) == 0));
+
+    ib_tra = find((g.mac.mac_con(mac_ib_idx,6) ~= 0) ...
+                  & (g.mac.mac_con(mac_ib_idx,8) == 0));
 
     if ~isempty(ib_tra)
-        g.mac.mac_ib_tra = g.mac.mac_ib_idx(ib_tra);
+        g.mac.mac_ib_tra = mac_ib_idx(ib_tra);
         g.mac.n_ib_tra = length(ib_tra);
     end
-    %
-    ib_sub = find(g.mac.mac_con(g.mac.mac_ib_idx,8) ~= 0);
+
+    ib_sub = find(g.mac.mac_con(mac_ib_idx,8) ~= 0);
+
     if ~isempty(ib_sub)
-        g.mac.mac_ib_sub = g.mac.mac_ib_idx(ib_sub);
+        g.mac.mac_ib_sub = mac_ib_idx(ib_sub);
         g.mac.n_ib_sub = length(ib_sub);
     end
 end

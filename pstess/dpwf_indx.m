@@ -13,6 +13,8 @@ function dpwf_indx()
 
 global g;  % declaring struct of global variables
 
+g.dpw.n_dpw = 0;
+
 if ~isempty(g.dpw.dpw_con)
     g.dpw.n_dpw = length(g.dpw.dpw_con(:,1));
 
@@ -60,8 +62,6 @@ if ~isempty(g.dpw.dpw_con)
             error(sprintf(estr,jdpw));
         end
     end
-else
-    g.dpw.n_dpw = 0;
 end
 
 end  % function end

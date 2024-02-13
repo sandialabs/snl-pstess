@@ -58,27 +58,41 @@ for k = 1:g.mac.n_mac
             k_row = 1 + sum(state(1:k-1));
         end
 
-        % all generators
         k_col = k;
-        for kgs = 1:nss.mac_em
-            p_mat(k_row+kgs-1,k_col+(kgs-1)*g.mac.n_mac) = 1;
+
+        k_ivm = [];
+        if ~isempty(g.mac.mac_ivm_idx)
+            k_ivm = find(g.mac.mac_ivm_idx == k);
         end
 
-        % subtransient and transient models
-        if (gen_state(k) > nss.mac_em)
-            p_mat(k_row+2,k_col+nss.mac_em*g.mac.n_mac) = 1;
-        end
-
-        % transient models
-        if (gen_state(k) == nss.mac_tra)
-            p_mat(k_row+3,k_col+nss.mac_tra*g.mac.n_mac) = 1;
-        end
-
-        % subtransient models
-        if (gen_state(k) == nss.mac_sub)
-            for kgs = nss.mac_tra:nss.mac_sub
+        if isempty(k_ivm)
+            % all synchronous generators (mac_ang, mac_spd)
+            for kgs = 1:nss.mac_em
                 p_mat(k_row+kgs-1,k_col+(kgs-1)*g.mac.n_mac) = 1;
             end
+
+            % subtransient and transient models (eqprime)
+            if (gen_state(k) > nss.mac_em)
+                p_mat(k_row+2,k_col+nss.mac_em*g.mac.n_mac) = 1;
+            end
+
+            % transient models (edprime)
+            if (gen_state(k) == nss.mac_tra)
+                p_mat(k_row+3,k_col+nss.mac_tra*g.mac.n_mac) = 1;
+            end
+
+            % subtransient models (psikd, edprime, psikq)
+            if (gen_state(k) == nss.mac_sub)
+                for kgs = nss.mac_tra:nss.mac_sub
+                    p_mat(k_row+kgs-1,k_col+(kgs-1)*g.mac.n_mac) = 1;
+                end
+            end
+        else
+            % ivm generators (mac_ang)
+            p_mat(k_row,k_col) = 1;
+
+            % ivm generators (eqprime)
+            p_mat(k_row+1,k_col+nss.mac_em*g.mac.n_mac) = 1;
         end
 
         % exciters
@@ -403,10 +417,10 @@ if (g.ess.n_ess ~= 0)
         k_row = k_row + 1;
         p_mat(k_row,k_col) = 1;
 
-%       % state of charge integrator (no effect on linearization)
-%       k_col = k_col + g.ess.n_ess;
-%       k_row = k_row + 1;
-%       p_mat(k_row,k_col) = 1;
+      % % state of charge integrator (no effect on linearization)
+      % k_col = k_col + g.ess.n_ess;
+      % k_row = k_row + 1;
+      % p_mat(k_row,k_col) = 1;
 
         k_col = k_col1;
     end
@@ -512,6 +526,121 @@ if (g.lsc.n_lsc ~= 0)
     end
 end
 
-% k_col1 = k_col1 + nss.lsc_max*g.lsc.n_lsc;  % for future expansion
+% reec
+k_col1 = k_col1 + nss.lsc_max*g.lsc.n_lsc;
+k_col = k_col1;
+if (g.reec.n_reec ~= 0)
+    for k = 1:g.reec.n_reec
+        % reec1 -- terminal voltage transducer
+        k_col = k_col + k;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % reec2 -- active power transducer
+        k_col = k_col + g.reec.n_reec;
+        if (g.reec.reec_con(k,32) == 1)
+            k_row = k_row + 1;
+            p_mat(k_row,k_col) = 1;
+        end
+
+        % reec3 -- reactive power transducer
+        k_col = k_col + g.reec.n_reec;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % reec4 -- first stage PI loop
+        k_col = k_col + g.reec.n_reec;
+        if ((g.reec.reec_con(k,33) == 1) && (g.reec.reec_con(k,34) == 1))
+            if (g.reec.reec_con(k,22) > 0)
+                k_row = k_row + 1;
+                p_mat(k_row,k_col) = 1;
+            end
+        end
+
+        % reec5 -- second stage PI loop
+        k_col = k_col + g.reec.n_reec;
+        if ((g.reec.reec_con(k,34) == 1) && (g.reec.reec_con(k,24) > 0))
+            k_row = k_row + 1;
+            p_mat(k_row,k_col) = 1;
+        end
+
+        % reec6 -- reactive current order filter
+        k_col = k_col + g.reec.n_reec;
+        if ((g.reec.reec_con(k,34) == 0) && (g.reec.reec_con(k,25) >= lbnd))
+            k_row = k_row + 1;
+            p_mat(k_row,k_col) = 1;
+        end
+
+        % reec7 -- active power order filter
+        k_col = k_col + g.reec.n_reec;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % reec8 -- voltage magnitude compensation filter
+        k_col = k_col + g.reec.n_reec;
+        if (g.reec.reec_con(k,38) >= lbnd)
+            k_row = k_row + 1;
+            p_mat(k_row,k_col) = 1;
+        end
+
+        % reec9 -- active current command filter
+        k_col = k_col + g.reec.n_reec;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % reec10 -- reactive current command filter
+        k_col = k_col + g.reec.n_reec;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        k_col = k_col1;
+    end
+end
+
+% gfma
+k_col1 = k_col1 + nss.reec_max*g.reec.n_reec;
+k_col = k_col1;
+if (g.gfma.n_gfma ~= 0)
+    for k = 1:g.gfma.n_gfma
+        % gfma1 -- commanded voltage angle integrator
+        k_col = k_col + k;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % note: overload mitigation states are not included in linearization;
+        %       this includes gfma2, gfma3, gfma6, gfma7
+
+        % gfma4 -- commanded voltage magnitude (first-order)
+        k_col = k_col + g.gfma.n_gfma;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % gfma5 -- voltage regulation integral control state
+        k_col = k_col + g.gfma.n_gfma;
+        if ((g.gfma.gfma_con(k,25) == 1) && (g.gfma.gfma_con(k,13) > 0))
+            k_row = k_row + 1;
+            p_mat(k_row,k_col) = 1;
+        end
+
+        % gfma8 -- active power transducer
+        k_col = k_col + g.gfma.n_gfma;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % gfma9 -- reactive power transducer
+        k_col = k_col + g.gfma.n_gfma;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        % gfma10 -- voltage transducer
+        k_col = k_col + g.gfma.n_gfma;
+        k_row = k_row + 1;
+        p_mat(k_row,k_col) = 1;
+
+        k_col = k_col1;
+    end
+end
+
+% k_col1 = k_col1 + nss.gfma_max*g.gfma.n_gfma;  % for future expansion
 
 % eof

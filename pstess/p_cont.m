@@ -50,14 +50,24 @@ for k = 1:g.mac.n_mac
         run('p_file');
         st_name(k,j) = 1;
 
-        j = j + 1;
-        pert = p_ratio*abs(g.mac.mac_spd(k,1));
-        pert = max(pert,p_ratio);
-        g.mac.mac_spd(k,3) = g.mac.mac_spd(k,1) + pert;
-        g.mac.mac_spd(k,4) = g.mac.mac_spd(k,1) - pert;
+        k_ivm = 0;
+        if ~isempty(g.mac.mac_ivm_idx)
+            k_idx = find(g.mac.mac_ivm_idx == k);
+            if ~isempty(k_idx)
+                k_ivm = 1;
+            end
+        end
 
-        run('p_file');
-        st_name(k,j) = 2;
+        if (k_ivm == 0)
+            j = j + 1;
+            pert = p_ratio*abs(g.mac.mac_spd(k,1));
+            pert = max(pert,p_ratio);
+            g.mac.mac_spd(k,3) = g.mac.mac_spd(k,1) + pert;
+            g.mac.mac_spd(k,4) = g.mac.mac_spd(k,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 2;
+        end
 
         k_tra = 0;
         k_sub = 0;
@@ -75,7 +85,7 @@ for k = 1:g.mac.n_mac
             end
         end
 
-        if (k_tra == 1 || k_sub == 1)
+        if (k_tra == 1 || k_sub == 1 || k_ivm == 1)
             j = j + 1;
             pert = p_ratio*abs(g.mac.eqprime(k,1));
             pert = max(pert,p_ratio);
@@ -610,15 +620,15 @@ if (g.ess.n_ess ~= 0)
         st_name(k,j) = 47;
         j = j + 1;
 
-%       % state of charge integrator (no effect on linearization)
-%       pert = p_ratio*abs(g.ess.ess5(k_ess,1));
-%       pert = max(pert,p_ratio);
-%       g.ess.ess5(k_ess,3) = g.ess.ess5(k_ess,1) + pert;
-%       g.ess.ess5(k_ess,4) = g.ess.ess5(k_ess,1) - pert;
-%
-%       run('p_file');
-%       st_name(k,j) = 48;
-%       j = j + 1;
+      % % state of charge integrator (no effect on linearization)
+      % pert = p_ratio*abs(g.ess.ess5(k_ess,1));
+      % pert = max(pert,p_ratio);
+      % g.ess.ess5(k_ess,3) = g.ess.ess5(k_ess,1) + pert;
+      % g.ess.ess5(k_ess,4) = g.ess.ess5(k_ess,1) - pert;
+      %
+      % run('p_file');
+      % st_name(k,j) = 48;
+      % j = j + 1;
 
         %--------------------------------------------------%
         % disturbing the converter interface input
@@ -829,6 +839,266 @@ if (g.lsc.n_lsc ~= 0)
     end
 end
 
-% n_tot_foo = n_tot_lsc + n_foo;  % template for future expansion
+% disturb the reec states
+n_tot_reec = n_tot_lsc + g.reec.n_reec;
+if (g.reec.n_reec ~= 0)
+    disp('disturbing reec')
+    for k = n_tot_lsc+1:n_tot_reec
+        k_reec = k - n_tot_lsc;
+
+        % reec1 -- voltage magnitude transducer
+        j = 1;
+        pert = p_ratio*abs(g.reec.reec1(k_reec,1));
+        pert = max(pert,p_ratio);
+        g.reec.reec1(k_reec,3) = g.reec.reec1(k_reec,1) + pert;
+        g.reec.reec1(k_reec,4) = g.reec.reec1(k_reec,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 64;
+        j = j + 1;
+
+        % reec2 -- active power transducer is present if pfflag == 1
+        if (g.reec.reec_con(k_reec,32) == 1)
+            pert = p_ratio*abs(g.reec.reec2(k_reec,1));
+            pert = max(pert,p_ratio);
+            g.reec.reec2(k_reec,3) = g.reec.reec2(k_reec,1) + pert;
+            g.reec.reec2(k_reec,4) = g.reec.reec2(k_reec,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 65;
+            j = j + 1;
+        end
+
+        % reec3 -- reactive power transducer
+        pert = p_ratio*abs(g.reec.reec3(k_reec,1));
+        pert = max(pert,p_ratio);
+        g.reec.reec3(k_reec,3) = g.reec.reec3(k_reec,1) + pert;
+        g.reec.reec3(k_reec,4) = g.reec.reec3(k_reec,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 66;
+        j = j + 1;
+
+        % reec4 -- first stage PI loop
+        if ((g.reec.reec_con(k_reec,33) == 1) && (g.reec.reec_con(k_reec,34) == 1))
+            if (g.reec.reec_con(k_reec,22) > 0)
+                pert = p_ratio*abs(g.reec.reec4(k_reec,1));
+                pert = max(pert,p_ratio);
+                g.reec.reec4(k_reec,3) = g.reec.reec4(k_reec,1) + pert;
+                g.reec.reec4(k_reec,4) = g.reec.reec4(k_reec,1) - pert;
+
+                run('p_file');
+                st_name(k,j) = 67;
+                j = j + 1;
+            end
+        end
+
+        % reec5 -- second stage PI loop
+        if ((g.reec.reec_con(k_reec,34) == 1) && (g.reec.reec_con(k_reec,24) > 0))
+            pert = p_ratio*abs(g.reec.reec5(k_reec,1));
+            pert = max(pert,p_ratio);
+            g.reec.reec5(k_reec,3) = g.reec.reec5(k_reec,1) + pert;
+            g.reec.reec5(k_reec,4) = g.reec.reec5(k_reec,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 68;
+            j = j + 1;
+        end
+
+        % reec6 -- reactive current filter
+        if (g.reec.reec_con(k_reec,34) == 0) && (g.reec.reec_con(k_reec,25) >= lbnd)
+            pert = p_ratio*abs(g.reec.reec6(k_reec,1));
+            pert = max(pert,p_ratio);
+            g.reec.reec6(k_reec,3) = g.reec.reec6(k_reec,1) + pert;
+            g.reec.reec6(k_reec,4) = g.reec.reec6(k_reec,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 69;
+            j = j + 1;
+        end
+
+        % reec7 -- active power reference filter
+        pert = p_ratio*abs(g.reec.reec7(k_reec,1));
+        pert = max(pert,p_ratio);
+        g.reec.reec7(k_reec,3) = g.reec.reec7(k_reec,1) + pert;
+        g.reec.reec7(k_reec,4) = g.reec.reec7(k_reec,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 70;
+        j = j + 1;
+
+        % reec8 -- compensated voltage filter
+        if (g.reec.reec_con(k_reec,38) >= lbnd)
+            pert = p_ratio*abs(g.reec.reec8(k_reec,1));
+            pert = max(pert,p_ratio);
+            g.reec.reec8(k_reec,3) = g.reec.reec8(k_reec,1) + pert;
+            g.reec.reec8(k_reec,4) = g.reec.reec8(k_reec,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 71;
+            j = j + 1;
+        end
+
+        % reec9 -- active current command filter
+        pert = p_ratio*abs(g.reec.reec9(k_reec,1));
+        pert = max(pert,p_ratio);
+        g.reec.reec9(k_reec,3) = g.reec.reec9(k_reec,1) + pert;
+        g.reec.reec9(k_reec,4) = g.reec.reec9(k_reec,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 72;
+        j = j + 1;
+
+        % reec10 -- reactive current command filter
+        pert = p_ratio*abs(g.reec.reec10(k_reec,1));
+        pert = max(pert,p_ratio);
+        g.reec.reec10(k_reec,3) = g.reec.reec10(k_reec,1) + pert;
+        g.reec.reec10(k_reec,4) = g.reec.reec10(k_reec,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 73;
+        j = j + 1;
+
+        %--------------------------------------------------%
+        % disturbing the reec control references
+
+        disp('disturbing the real part of reec_sig (voltage)')
+        c_state = 13;
+
+        reec_input = k_reec;
+        pert = p_ratio;
+        g.reec.reec_sig(k_reec,3) = g.reec.reec_sig(k_reec,1) + pert;
+        g.reec.reec_sig(k_reec,4) = g.reec.reec_sig(k_reec,1) - pert;
+
+        % resetting the input
+        run('p_file');
+        g.reec.reec_sig(k_reec,3) = g.reec.reec_sig(k_reec,1);
+        g.reec.reec_sig(k_reec,4) = g.reec.reec_sig(k_reec,1);
+        c_state = 0;
+
+        disp('disturbing the imaginary part of reec_sig (reactive)')
+        c_state = 14;
+
+        reec_input = k_reec;
+        pert = p_ratio;
+        g.reec.reec_sig(k_reec,3) = g.reec.reec_sig(k_reec,1) + 1j*pert;
+        g.reec.reec_sig(k_reec,4) = g.reec.reec_sig(k_reec,1) - 1j*pert;
+
+        % resetting the input
+        run('p_file');
+        g.reec.reec_sig(k_reec,3) = g.reec.reec_sig(k_reec,1);
+        g.reec.reec_sig(k_reec,4) = g.reec.reec_sig(k_reec,1);
+        c_state = 0;
+    end
+end
+
+% disturb the gfma states
+n_tot_gfma = n_tot_reec + g.gfma.n_gfma;
+if (g.gfma.n_gfma ~= 0)
+    disp('disturbing gfma')
+    for k = n_tot_reec+1:n_tot_gfma
+        k_gfma = k - n_tot_reec;
+
+        % gfma1 -- commanded voltage angle integrator
+        j = 1;
+        pert = p_ratio*abs(g.gfma.gfma1(k_gfma,1));
+        pert = max(pert,p_ratio);
+        g.gfma.gfma1(k_gfma,3) = g.gfma.gfma1(k_gfma,1) + pert;
+        g.gfma.gfma1(k_gfma,4) = g.gfma.gfma1(k_gfma,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 74;
+        j = j + 1;
+
+        % gfma2 and gfma3 states not included in linearization
+
+        % gfma4 -- commanded voltage magnitude (first-order)
+        pert = p_ratio*abs(g.gfma.gfma4(k_gfma,1));
+        pert = max(pert,p_ratio);
+        g.gfma.gfma4(k_gfma,3) = g.gfma.gfma4(k_gfma,1) + pert;
+        g.gfma.gfma4(k_gfma,4) = g.gfma.gfma4(k_gfma,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 75;
+        j = j + 1;
+
+        % gfma5 -- voltage regulation integral control state (vflag == 1)
+        if ((g.gfma.gfma_con(k_gfma,25) == 1) && (g.gfma.gfma_con(k_gfma,13) > 0))
+            pert = p_ratio*abs(g.gfma.gfma5(k_gfma,1));
+            pert = max(pert,p_ratio);
+            g.gfma.gfma5(k_gfma,3) = g.gfma.gfma5(k_gfma,1) + pert;
+            g.gfma.gfma5(k_gfma,4) = g.gfma.gfma5(k_gfma,1) - pert;
+
+            run('p_file');
+            st_name(k,j) = 76;
+            j = j + 1;
+        end
+
+        % gfma6 and gfma7 states not included in linearization
+
+        % gfma8 -- active power transducer
+        pert = p_ratio*abs(g.gfma.gfma8(k_gfma,1));
+        pert = max(pert,p_ratio);
+        g.gfma.gfma8(k_gfma,3) = g.gfma.gfma8(k_gfma,1) + pert;
+        g.gfma.gfma8(k_gfma,4) = g.gfma.gfma8(k_gfma,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 77;
+        j = j + 1;
+
+        % gfma9 -- reactive power transducer
+        pert = p_ratio*abs(g.gfma.gfma9(k_gfma,1));
+        pert = max(pert,p_ratio);
+        g.gfma.gfma9(k_gfma,3) = g.gfma.gfma9(k_gfma,1) + pert;
+        g.gfma.gfma9(k_gfma,4) = g.gfma.gfma9(k_gfma,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 78;
+        j = j + 1;
+
+        % gfma10 -- voltage transducer
+        pert = p_ratio*abs(g.gfma.gfma10(k_gfma,1));
+        pert = max(pert,p_ratio);
+        g.gfma.gfma10(k_gfma,3) = g.gfma.gfma10(k_gfma,1) + pert;
+        g.gfma.gfma10(k_gfma,4) = g.gfma.gfma10(k_gfma,1) - pert;
+
+        run('p_file');
+        st_name(k,j) = 79;
+        j = j + 1;
+
+        %--------------------------------------------------%
+        % disturbing the gfma control references
+
+        disp('disturbing the real part of gfma_sig (active)')
+        c_state = 15;
+
+        gfma_input = k_gfma;
+        pert = p_ratio;
+        g.gfma.gfma_sig(k_gfma,3) = g.gfma.gfma_sig(k_gfma,1) + pert;
+        g.gfma.gfma_sig(k_gfma,4) = g.gfma.gfma_sig(k_gfma,1) - pert;
+
+        % resetting the input
+        run('p_file');
+        g.gfma.gfma_sig(k_gfma,3) = g.gfma.gfma_sig(k_gfma,1);
+        g.gfma.gfma_sig(k_gfma,4) = g.gfma.gfma_sig(k_gfma,1);
+        c_state = 0;
+
+        disp('disturbing the imaginary part of gfma_sig (reactive)')
+        c_state = 16;
+
+        gfma_input = k_gfma;
+        pert = p_ratio;
+        g.gfma.gfma_sig(k_gfma,3) = g.gfma.gfma_sig(k_gfma,1) + 1j*pert;
+        g.gfma.gfma_sig(k_gfma,4) = g.gfma.gfma_sig(k_gfma,1) - 1j*pert;
+
+        % resetting the input
+        run('p_file');
+        g.gfma.gfma_sig(k_gfma,3) = g.gfma.gfma_sig(k_gfma,1);
+        g.gfma.gfma_sig(k_gfma,4) = g.gfma.gfma_sig(k_gfma,1);
+        c_state = 0;
+    end
+end
+
+% n_tot_foo = n_tot_gfma + g.foo.n_foo;  % template for future expansion
 
 % eof

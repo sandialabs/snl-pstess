@@ -11,6 +11,11 @@
 %-----------------------------------------------------------------------------%
 % Version history
 %
+% Version: 1.92
+% Author:  D. Trudnowski
+% Date:    2023
+% Purpose: Updated to allow for generator, load, and line tripping
+%
 % Version: 1.91
 % Author:  Ryan Elliott
 % Date:    2020
@@ -123,13 +128,17 @@ else
 end
 
 % check for valid dynamic data file
-if isempty(g.mac.mac_con)
+if (isempty(g.mac.mac_con) && isempty(g.ivm.ivm_con))
     error('s_simu: the selected file is not a valid data file (mac_con).');
 end
 
 % check for valid switching sequence
 if isempty(g.sys.sw_con)
     error('s_simu: the selected file has no switching data (sw_con).');
+else
+    if any(diff(g.sys.sw_con(:,1)) < 0)
+         error('s_simu: time points in sw_con must be non-decreasing.');
+    end
 end
 
 % specify the system mva base and nominal frequency
@@ -187,19 +196,36 @@ else
     load('sim_fle');
 end
 
+% adjusting bus matrix for ess instances specified as generation
+if ~isempty(g.ess.ess_con)
+    j_ess = g.bus.bus_int(g.ess.ess_con(:,2));
+
+    mask = (bus(j_ess,10) ~= 3);
+    if any(mask)
+        bus(j_ess(mask),6) = -bus(j_ess(mask),4);
+        bus(j_ess(mask),7) = -bus(j_ess(mask),5);
+        bus(j_ess(mask),4) = 0.0;
+        bus(j_ess(mask),5) = 0.0;
+    end
+end
+
 % note: dc_indx() called in dc load flow (lfdcs)
 mac_indx();
 exc_indx();
-tg_indx();
 dpwf_indx();
 pss_indx();
+tg_indx();
+ivm_indx();
+gfma_indx();
 svc_indx(svc_dc);
 tcsc_indx(tcsc_dc);
 lsc_indx(bus);
+reec_indx();
 ess_indx();
 lmod_indx();
 rlmod_indx();
 pwrmod_indx(bus);
+trip_indx(bus);
 
 % make sure bus max/min Q is the same as the pwrmod_con max/min Q
 if ~isempty(g.pwr.n_pwrmod)
@@ -263,6 +289,7 @@ t(k) = g.sys.sw_con(n_switch,1);
 
 [n,~] = size(g.mac.mac_con);
 n_bus = length(bus(:,1));
+g.bus.n_bus = n_bus;
 
 % create zero matrices to initialize variables
 z = zeros(n,k);
@@ -405,14 +432,13 @@ g.mac.cur_re = z;
 g.mac.cur_im = z;
 g.mac.psi_re = z;
 g.mac.psi_im = z;
-%
-g.mac.mac_ang = z;
+g.mac.mac_ang = z;   % states
 g.mac.mac_spd = z;
 g.mac.edprime = z;
 g.mac.eqprime = z;
 g.mac.psikd = z;
 g.mac.psikq = z;
-g.mac.dmac_ang = z;
+g.mac.dmac_ang = z;  % state derivatives
 g.mac.dmac_spd = z;
 g.mac.dedprime = z;
 g.mac.deqprime = z;
@@ -486,6 +512,46 @@ g.exc.dEfd = ze;
 g.exc.dR_f = ze;
 g.exc.exc_sig = ze;
 g.exc.pss_out = ze;
+
+% ivm user-defined control variable declarations
+if ((g.ivm.n_ivm ~= 0) && (g.ivm.n_ivmud ~= 0))
+    xivm_dc.s{1} = zeros(g.ivm.n_ivmud,k);
+end
+
+% gfma variable declarations
+if (g.gfma.n_gfma ~= 0)
+    z_gfma = zeros(g.gfma.n_gfma,k);
+    o_gfma = ones(g.gfma.n_gfma,k);
+
+    g.gfma.gfma1 = z_gfma;
+    g.gfma.gfma2 = z_gfma;
+    g.gfma.gfma3 = z_gfma;
+    g.gfma.gfma4 = z_gfma;
+    g.gfma.gfma5 = z_gfma;
+    g.gfma.gfma6 = z_gfma;
+    g.gfma.gfma7 = z_gfma;
+    g.gfma.gfma8 = z_gfma;
+    g.gfma.gfma9 = z_gfma;
+    g.gfma.gfma10 = z_gfma;
+
+    g.gfma.dgfma1 = z_gfma;
+    g.gfma.dgfma2 = z_gfma;
+    g.gfma.dgfma3 = z_gfma;
+    g.gfma.dgfma4 = z_gfma;
+    g.gfma.dgfma5 = z_gfma;
+    g.gfma.dgfma6 = z_gfma;
+    g.gfma.dgfma7 = z_gfma;
+    g.gfma.dgfma8 = z_gfma;
+    g.gfma.dgfma9 = z_gfma;
+    g.gfma.dgfma10 = z_gfma;
+
+    g.gfma.gfma_sig = z_gfma;
+
+    g.gfma.pset = o_gfma;
+    g.gfma.qset = o_gfma;
+    g.gfma.vset = o_gfma;
+    g.gfma.lim_flag = false(g.gfma.n_gfma,1);
+end
 
 g.ind.t_mot = zm;
 g.ind.p_mot = zm;
@@ -581,76 +647,136 @@ else
 end
 
 % lsc variable declarations
-z_lsc = zeros(max(g.lsc.n_lsc,1),k);
-%
-g.lsc.lsc1 = z_lsc;
-g.lsc.lsc2 = z_lsc;
-g.lsc.lsc3 = z_lsc;
-g.lsc.lsc4 = z_lsc;
-g.lsc.lsc5 = z_lsc;
-g.lsc.lsc6 = z_lsc;
-g.lsc.lsc7 = z_lsc;
-g.lsc.lsc8 = z_lsc;
-g.lsc.lsc9 = z_lsc;
-g.lsc.lsc10 = z_lsc;
-g.lsc.lsc11 = z_lsc;
-g.lsc.lsc12 = z_lsc;
-g.lsc.lsc13 = z_lsc;
-g.lsc.lsc14 = z_lsc;
-g.lsc.lsc15 = z_lsc;
-%
-g.lsc.dlsc1 = z_lsc;
-g.lsc.dlsc2 = z_lsc;
-g.lsc.dlsc3 = z_lsc;
-g.lsc.dlsc4 = z_lsc;
-g.lsc.dlsc5 = z_lsc;
-g.lsc.dlsc6 = z_lsc;
-g.lsc.dlsc7 = z_lsc;
-g.lsc.dlsc8 = z_lsc;
-g.lsc.dlsc9 = z_lsc;
-g.lsc.dlsc10 = z_lsc;
-g.lsc.dlsc11 = z_lsc;
-g.lsc.dlsc12 = z_lsc;
-g.lsc.dlsc13 = z_lsc;
-g.lsc.dlsc14 = z_lsc;
-g.lsc.dlsc15 = z_lsc;
-%
-g.lsc.theta_sensor = zeros(max(g.lsc.n_sensor,1),k);
-g.lsc.theta_coi_pade = z_lsc;
-g.lsc.theta_lsc_pade = z_lsc;
-% g.lsc.theta_coi_del = z_lsc;  % for shift-register delay model
-%
-g.lsc.lsc_scmd = z_lsc;
+if (g.lsc.n_lsc ~= 0)
+    z_lsc = zeros(g.lsc.n_lsc,k);
+
+    g.lsc.lsc1 = z_lsc;
+    g.lsc.lsc2 = z_lsc;
+    g.lsc.lsc3 = z_lsc;
+    g.lsc.lsc4 = z_lsc;
+    g.lsc.lsc5 = z_lsc;
+    g.lsc.lsc6 = z_lsc;
+    g.lsc.lsc7 = z_lsc;
+    g.lsc.lsc8 = z_lsc;
+    g.lsc.lsc9 = z_lsc;
+    g.lsc.lsc10 = z_lsc;
+    g.lsc.lsc11 = z_lsc;
+    g.lsc.lsc12 = z_lsc;
+    g.lsc.lsc13 = z_lsc;
+    g.lsc.lsc14 = z_lsc;
+    g.lsc.lsc15 = z_lsc;
+
+    g.lsc.dlsc1 = z_lsc;
+    g.lsc.dlsc2 = z_lsc;
+    g.lsc.dlsc3 = z_lsc;
+    g.lsc.dlsc4 = z_lsc;
+    g.lsc.dlsc5 = z_lsc;
+    g.lsc.dlsc6 = z_lsc;
+    g.lsc.dlsc7 = z_lsc;
+    g.lsc.dlsc8 = z_lsc;
+    g.lsc.dlsc9 = z_lsc;
+    g.lsc.dlsc10 = z_lsc;
+    g.lsc.dlsc11 = z_lsc;
+    g.lsc.dlsc12 = z_lsc;
+    g.lsc.dlsc13 = z_lsc;
+    g.lsc.dlsc14 = z_lsc;
+    g.lsc.dlsc15 = z_lsc;
+
+    g.lsc.theta_sensor = zeros(max(g.lsc.n_sensor,1),k);
+    g.lsc.theta_coi_pade = z_lsc;
+    g.lsc.theta_lsc_pade = z_lsc;
+    % g.lsc.theta_coi_del = z_lsc;  % for shift-register delay model
+
+    g.lsc.lsc_scmd = z_lsc;
+end
+
+% reec variable declarations
+if (g.reec.n_reec ~= 0)
+    % reec variable declarations
+    z_reec = zeros(g.reec.n_reec,k);
+    o_reec = ones(g.reec.n_reec,k);
+
+    g.reec.reec1 = z_reec;                        % states
+    g.reec.reec2 = z_reec;
+    g.reec.reec3 = z_reec;
+    g.reec.reec4 = z_reec;
+    g.reec.reec5 = z_reec;
+    g.reec.reec6 = z_reec;
+    g.reec.reec7 = z_reec;
+    g.reec.reec8 = z_reec;
+    g.reec.reec9 = z_reec;
+    g.reec.reec10 = z_reec;
+
+    g.reec.dreec1 = z_reec;                       % derivatives
+    g.reec.dreec2 = z_reec;
+    g.reec.dreec3 = z_reec;
+    g.reec.dreec4 = z_reec;
+    g.reec.dreec5 = z_reec;
+    g.reec.dreec6 = z_reec;
+    g.reec.dreec7 = z_reec;
+    g.reec.dreec8 = z_reec;
+    g.reec.dreec9 = z_reec;
+    g.reec.dreec10 = z_reec;
+
+    g.reec.icmd = z_reec;                         % commands
+    g.reec.paux = z_reec;
+    g.reec.reec_sig = z_reec;                     % modulation
+
+    g.reec.iqmin = ones(g.reec.n_reec,1);
+    g.reec.iqmax = ones(g.reec.n_reec,1);
+
+    g.reec.pref = o_reec;                         % references
+    g.reec.qref = o_reec;
+    g.reec.pfaref = zeros(g.reec.n_reec,1);
+
+    g.reec.vref0 = ones(g.reec.n_reec,1);
+    g.reec.vref1 = ones(g.reec.n_reec,1);
+
+    g.reec.vdip = false(g.reec.n_reec,1);
+    g.reec.vdip_tick = -1*ones(g.reec.n_reec,1);
+    g.reec.vdip_time = zeros(g.reec.n_reec,1);
+    g.reec.vdip_icmd = zeros(g.reec.n_reec,1);
+
+    g.reec.vblk = false(g.reec.n_reec,1);
+    g.reec.vblk_tick = -1*ones(g.reec.n_reec,1);
+    g.reec.vblk_time = zeros(g.reec.n_reec,1);
+end
 
 % ess variable declarations
-z_ess = zeros(max(g.ess.n_ess,1),k);
-%
-g.ess.ess1 = z_ess;
-g.ess.ess2 = z_ess;
-g.ess.ess3 = z_ess;
-g.ess.ess4 = z_ess;
-g.ess.ess5 = z_ess;
-%
-g.ess.dess1 = z_ess;
-g.ess.dess2 = z_ess;
-g.ess.dess3 = z_ess;
-g.ess.dess4 = z_ess;
-g.ess.dess5 = z_ess;
-%
-g.ess.ess_cur = z_ess;
-g.ess.ess_soc = z_ess;
-g.ess.ess_vmag = z_ess;
-g.ess.ess_scmd = z_ess;
-g.ess.ess_sinj = z_ess;
-g.ess.ess_iord = z_ess;
-g.ess.ess_vmag_pade = z_ess;
+if (g.ess.n_ess ~= 0)
+    z_ess = zeros(g.ess.n_ess,k);
 
-g.ess.ess_sig = z_ess;
-g.ess.ess_dsig = z_ess;
+    g.ess.ess1 = z_ess;
+    g.ess.ess2 = z_ess;
+    g.ess.ess3 = z_ess;
+    g.ess.ess4 = z_ess;
+    g.ess.ess5 = z_ess;
+
+    g.ess.dess1 = z_ess;
+    g.ess.dess2 = z_ess;
+    g.ess.dess3 = z_ess;
+    g.ess.dess4 = z_ess;
+    g.ess.dess5 = z_ess;
+
+    g.ess.ess_cur = z_ess;
+    g.ess.ess_soc = z_ess;
+    g.ess.ess_vmag = z_ess;
+    g.ess.ess_scmd = z_ess;
+    g.ess.ess_sinj = z_ess;
+    g.ess.ess_iord = z_ess;
+    g.ess.ess_vmag_pade = z_ess;
+
+    g.ess.ess_sig = z_ess;
+    g.ess.ess_dsig = z_ess;
+end
 
 % ess user-defined control variable declarations
-z_essud = zeros(max(g.ess.n_essud,1),k);
-xess_dc.s{1} = z_essud;  % dynamic states
+if ((g.ess.n_ess ~= 0) && (g.ess.n_essud ~= 0))
+    z_essud = zeros(g.ess.n_essud,k);
+    xess_dc.s{1} = z_essud;  % dynamic states
+else
+    xess_dc.s{1} = [];       % empty array
+end
 
 % initialize lmod and rlmod
 if (g.lmod.n_lmod ~= 0)
@@ -678,7 +804,7 @@ if (g.pwr.n_pwrmod ~= 0)
     g.pwr.pwrmod_p_st = zeros(g.pwr.n_pwrmod,k);
     g.pwr.dpwrmod_p_st = g.pwr.pwrmod_p_st;
     g.pwr.pwrmod_p_sig = g.pwr.pwrmod_p_st;
-    %
+
     g.pwr.pwrmod_q_st = zeros(g.pwr.n_pwrmod,k);
     g.pwr.dpwrmod_q_st = g.pwr.pwrmod_q_st;
     g.pwr.pwrmod_q_sig = g.pwr.pwrmod_q_st;
@@ -686,19 +812,20 @@ else
     g.pwr.pwrmod_p_st = zeros(1,k);
     g.pwr.dpwrmod_p_st = g.pwr.pwrmod_p_st;
     g.pwr.pwrmod_p_sig = g.pwr.pwrmod_p_st;
-    %
+
     g.pwr.pwrmod_q_st = zeros(1,k);
     g.pwr.dpwrmod_q_st = g.pwr.pwrmod_q_st;
     g.pwr.pwrmod_q_sig = g.pwr.pwrmod_q_st;
 end
 
-% initialize ivmmod sigs
-if (g.mac.n_ivm ~= 0)
-    g.mac.ivmmod_d_sig = zeros(g.mac.n_ivm,k);
-    g.mac.ivmmod_e_sig = zeros(g.mac.n_ivm,k);
-else
-    g.mac.ivmmod_d_sig = zeros(1,k);
-    g.mac.ivmmod_e_sig = zeros(1,k);
+% initialize trip flags
+if g.trip.enable
+    g.trip.mac_trip_flags = false(g.mac.n_mac,k);
+    g.trip.load_trip_flags = false(n_bus,k);
+    g.trip.load_trip_frac = zeros(n_bus,k);
+    g.trip.line_trip_flags = false(size(line,1),k);
+    g.trip.load_trip_ncl = zeros(g.trip.n_trip_ncl,k);
+    g.trip.user_variables = [];
 end
 
 g.sys.sys_freq = ones(1,k);
@@ -717,6 +844,7 @@ disp('initializing svc, tcsc, lsc, ess, and hvdc models')
 bus = svc(0,1,bus,0);       % initialize svc models
 tcsc(0,1,0);                % initialize tcsc models
 lsc(0,1,bus,0);             % initialize lsc models
+reec(0,1,bus,0);            % initialize reec models
 ess(0,1,bus,0);             % initialize ess models
 dc_cont(0,1,1,bus,0);       % initialize hvdc control models
 
@@ -851,34 +979,12 @@ exc_dc12(0,1,flag);
 tg(0,1,flag);
 tg_hydro(0,1,flag);
 
-% initialize ivm modulation control - added from v2.3 06/01/20 - thad
-if (g.mac.n_ivm ~= 0)
-    disp('ivm modulation')
-    [~,~,~,~,Dini,Eini] = ivmmod_dyn([],[],bus,t,1,flag);
+disp('ivm generator controls')
+gfma(0,1,bus,flag);
 
-    if (~iscell(Dini) || ~iscell(Eini))
-        error('s_simu: error in ivmmod_dyn, initial states must be cells.');
-    end
-
-    if (any(size(Dini)-[g.mac.n_ivm,1]) || any(size(Eini)-[g.mac.n_ivm,1]))
-        error('s_simu: dimension error in ivmmod_dyn.');
-    end
-
-    ivmmod_d_sigst = cell(g.mac.n_ivm,1);
-    ivmmod_e_sigst = ivmmod_d_sigst;
-    divmmod_d_sigst = ivmmod_d_sigst;
-    divmmod_e_sigst = ivmmod_d_sigst;
-
-    for index = 1:g.mac.n_ivm
-        if ((size(Dini{index},2) ~= 1) || (size(Eini{index},2) ~= 1))
-            error('s_simu: dimension error in ivmmod_dyn.');
-        end
-        divmmod_d_sigst{index} = zeros(size(Dini{index},1),k);
-        ivmmod_d_sigst{index} = Dini{index}*ones(1,k);
-        divmmod_e_sigst{index} = zeros(size(Eini{index},1),k);
-        ivmmod_e_sigst{index} = Eini{index}*ones(1,k);
-    end
-    clear('index','Dini','Eini');
+% user-defined ivm control models
+if ((g.ivm.n_ivm ~= 0) && (g.ivm.n_ivmud ~= 0))
+    xivm_dc = ivm_sud(0,1,bus,flag,xivm_dc);
 end
 
 % initialize svc damping controls
@@ -1020,10 +1126,6 @@ lswitch = length(k_inc);
 ktmax = k_tot - k_inc(lswitch);
 bus_sim = bus;
 
-% added from v2.3 06/01/20 - thad
-mac_trip_flags = false(g.mac.n_mac,1);
-mac_trip_states = 0;
-
 %% Starting simulation loop
 warning('*** Starting simulation loop')
 while (kt <= ktmax)
@@ -1048,19 +1150,25 @@ while (kt <= ktmax)
             g.dc.cur_ord(:,k+1) = g.dc.cur_ord(:,k);
         end
 
-        % Trip gen - Copied from v2.3 06/01/20 - thad
-        [f,mac_trip_states] = mac_trip_logic(mac_trip_flags,mac_trip_states,t,k);
-        mac_trip_flags = (mac_trip_flags | f);
-
         flag = 1;
 
+        % required to track actual ivm speed
+        mac_ang_ivm_old = g.mac.mac_ang(g.mac.mac_ivm_idx,k);
+
         % network-machine interface for generators
-        mpm_sig(t(k),k);
         mac_ind(0,k,bus_sim,flag);
         mac_igen(0,k,bus_sim,flag);
         mac_sub(0,k,bus_sim,flag);
         mac_tra(0,k,bus_sim,flag);
         mac_em(0,k,bus_sim,flag);
+
+        % network interface for internal voltage models
+        gfma(0,k,bus_sim,flag);
+
+        if (g.ivm.n_ivmud ~= 0)
+            xivm_dc = ivm_sud(0,k,bus_sim,flag,xivm_dc);
+        end
+
         mac_ivm(0,k,bus_sim,flag);
 
         % network interface for hvdc
@@ -1118,23 +1226,30 @@ while (kt <= ktmax)
             bo = boprf;
         end
 
-        % apply gen trip - added from v2.3 - 06/01/20 - thad
-        if (sum(mac_trip_flags) > 0.5)
-            genBuses = g.mac.mac_con(mac_trip_flags == 1,2);
-            for kB = 1:length(genBuses)
-                nL = find(genBuses(kB) == line_sim(:,1) ...
-                          | genBuses(kB) == line_sim(:,2));
-                if isempty(nL)
-                    error('s_simu: nL is empty.');
-                end
-                line_sim(nL,4) = 1e7;  % make reactance infinite
-            end
+        if g.trip.enable
+            [bus_sim,line_sim] = trip_handler(t(k),k,true,bus_sim,line_sim);
             [Y1,Y2,Y3,Y4,Vr1,Vr2,bo] = red_ybus(bus_sim,line_sim);
-            clear('nL','kB','genBuses');
         end
 
         % form the network interface variables
         h_sol = i_simu(k,ks,k_inc,h,bus_sim,Y1,Y2,Y3,Y4,Vr1,Vr2,bo);
+
+        % checking for gfma current limit violations
+        if (g.gfma.n_gfma ~= 0)
+            if any(g.gfma.lim_flag)
+                fprintf('entered gfma current limiting at time index %0.0f\n', k);
+                for jj = 1:50
+                    gfma(0,k,bus_sim,flag);
+                    mac_ivm(0,k,bus_sim,flag);
+                    h_sol = i_simu(k,ks,k_inc,h,bus_sim,Y1,Y2,Y3,Y4,Vr1,Vr2,bo);
+
+                    if ~any(g.gfma.lim_flag)
+                        break
+                    end
+                end
+                fprintf('exited after %0.0f iterations\n', jj);
+            end
+        end
 
         freqcalc(k,t,1);               % measuring frequency (Felipe Wilches)
 
@@ -1184,16 +1299,16 @@ while (kt <= ktmax)
         % network interface for control models
         mdc_sig(t(k),k);
         dc_cont(0,k,10*(k-1)+1,bus_sim,flag);
-        %
+
         dpwf(0,k,flag);
         pss(0,k,flag);
-        %
+
         mexc_sig(t(k),k);
         smpexc(0,k,flag);
         smppi(0,k,flag);
         exc_st3(0,k,flag);
         exc_dc12(0,k,flag);
-        %
+
         mtg_sig(t(k),k);
         tg(0,k,flag);
         tg_hydro(0,k,flag);
@@ -1249,23 +1364,24 @@ while (kt <= ktmax)
 
         % step 3b: compute dynamics and integrate
         flag = 2;
-        %
+
         mpm_sig(t(k),k);
         mac_ind(0,k,bus_sim,flag);
         mac_igen(0,k,bus_sim,flag);
         mac_sub(0,k,bus_sim,flag);
         mac_tra(0,k,bus_sim,flag);
         mac_em(0,k,bus_sim,flag);
-        %
+        mac_ivm(0,k,bus_sim,flag);
+
         dpwf(0,k,flag);
         pss(0,k,flag);
-        %
+
         mexc_sig(t(k),k);
         smpexc(0,k,flag);
         smppi(0,k,flag);
         exc_st3(0,k,flag);
         exc_dc12(0,k,flag);
-        %
+
         mtg_sig(t(k),k);
         tg(0,k,flag);
         tg_hydro(0,k,flag);
@@ -1309,7 +1425,9 @@ while (kt <= ktmax)
 
         if (g.ess.n_ess ~= 0)
             mess_sig(t(k),k);
+            mreec_sig(t(k),k);
             lsc(0,k,bus_sim,flag);
+            reec(0,k,bus_sim,flag,h_sol);
             xess_dc = ess_sud(0,k,bus_sim,flag,xess_dc);
             ess(0,k,bus_sim,flag,h_sol);
         end
@@ -1369,51 +1487,13 @@ while (kt <= ktmax)
             clear('P','Q','Pst','Qst','dp','dq','index');
         end
 
-        % ivm modulation - copied from v2.3 - 06/01/20 -thad
-        if (g.mac.n_ivm > 0)
-            dst = cell(g.mac.n_ivm,1);
-            est = dst;
-            for index = 1:g.mac.n_ivm
-                dst{index} = ivmmod_d_sigst{index}(:,k);
-                est{index} = ivmmod_e_sigst{index}(:,k);
+        % ivm control models
+        if (g.ivm.n_ivm ~= 0)
+            mgfma_sig(t(k),k);
+            gfma(0,k,bus_sim,flag);
+            if (g.ivm.n_ivmud ~= 0)
+                xivm_dc = ivm_sud(0,k,bus_sim,flag,xivm_dc);
             end
-
-            % get internal voltage signals
-            [d,e,~,~,~,~] = ivmmod_dyn(dst,est,bus,t,k,1);
-            if (length(d) ~= g.mac.n_ivm || length(e) ~= g.mac.n_ivm)
-                error('s_simu: dimension error in ivmmod_dyn.');
-            end
-
-            g.mac.ivmmod_d_sig(:,k) = d;
-            g.mac.ivmmod_e_sig(:,k) = e;
-            mac_ivm(0,k,bus_sim,flag);
-
-            [~,~,dd,de,~,~] = ivmmod_dyn(dst,est,bus,t,k,flag);
-            if (~iscell(dd) || ~iscell(de))
-                error('s_simu: error in ivmmod_dyn, dd and de must be cells.');
-            end
-
-            if (any(size(dd)-[g.mac.n_ivm,1]) || any(size(de)-[g.mac.n_ivm,1]))
-                error('s_simu: dimension error in ivmmod_dyn.');
-            end
-
-            for index = 1:g.mac.n_ivm
-                if (size(dd{index},2) ~= 1 || size(de{index},2) ~= 1)
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                if (size(dd{index},1) ~= size(divmmod_d_sigst{index},1))
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                if (size(de{index},1) ~= size(divmmod_e_sigst{index},1))
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                divmmod_d_sigst{index}(:,k) = dd{index};
-                divmmod_e_sigst{index}(:,k) = de{index};
-            end
-            clear('d','e','dd','de','dst','est');
         end
 
         % integrate hvdc at ten times rate
@@ -1498,31 +1578,50 @@ while (kt <= ktmax)
         %
         % lsc
         %
-        g.lsc.lsc1(:,j) = g.lsc.lsc1(:,k) + h_sol*g.lsc.dlsc1(:,k);
-        g.lsc.lsc2(:,j) = g.lsc.lsc2(:,k) + h_sol*g.lsc.dlsc2(:,k);
-        g.lsc.lsc3(:,j) = g.lsc.lsc3(:,k) + h_sol*g.lsc.dlsc3(:,k);
-        g.lsc.lsc4(:,j) = g.lsc.lsc4(:,k) + h_sol*g.lsc.dlsc4(:,k);
-        g.lsc.lsc5(:,j) = g.lsc.lsc5(:,k) + h_sol*g.lsc.dlsc5(:,k);
-        g.lsc.lsc6(:,j) = g.lsc.lsc6(:,k) + h_sol*g.lsc.dlsc6(:,k);
-        g.lsc.lsc7(:,j) = g.lsc.lsc7(:,k) + h_sol*g.lsc.dlsc7(:,k);
-        g.lsc.lsc8(:,j) = g.lsc.lsc8(:,k) + h_sol*g.lsc.dlsc8(:,k);
-        g.lsc.lsc9(:,j) = g.lsc.lsc9(:,k) + h_sol*g.lsc.dlsc9(:,k);
-        g.lsc.lsc10(:,j) = g.lsc.lsc10(:,k) + h_sol*g.lsc.dlsc10(:,k);
-        g.lsc.lsc11(:,j) = g.lsc.lsc11(:,k) + h_sol*g.lsc.dlsc11(:,k);
-        g.lsc.lsc12(:,j) = g.lsc.lsc12(:,k) + h_sol*g.lsc.dlsc12(:,k);
-        g.lsc.lsc13(:,j) = g.lsc.lsc13(:,k) + h_sol*g.lsc.dlsc13(:,k);
-        g.lsc.lsc14(:,j) = g.lsc.lsc14(:,k) + h_sol*g.lsc.dlsc14(:,k);
-        g.lsc.lsc15(:,j) = g.lsc.lsc15(:,k) + h_sol*g.lsc.dlsc15(:,k);
+        if (g.lsc.n_lsc ~= 0)
+            g.lsc.lsc1(:,j) = g.lsc.lsc1(:,k) + h_sol*g.lsc.dlsc1(:,k);
+            g.lsc.lsc2(:,j) = g.lsc.lsc2(:,k) + h_sol*g.lsc.dlsc2(:,k);
+            g.lsc.lsc3(:,j) = g.lsc.lsc3(:,k) + h_sol*g.lsc.dlsc3(:,k);
+            g.lsc.lsc4(:,j) = g.lsc.lsc4(:,k) + h_sol*g.lsc.dlsc4(:,k);
+            g.lsc.lsc5(:,j) = g.lsc.lsc5(:,k) + h_sol*g.lsc.dlsc5(:,k);
+            g.lsc.lsc6(:,j) = g.lsc.lsc6(:,k) + h_sol*g.lsc.dlsc6(:,k);
+            g.lsc.lsc7(:,j) = g.lsc.lsc7(:,k) + h_sol*g.lsc.dlsc7(:,k);
+            g.lsc.lsc8(:,j) = g.lsc.lsc8(:,k) + h_sol*g.lsc.dlsc8(:,k);
+            g.lsc.lsc9(:,j) = g.lsc.lsc9(:,k) + h_sol*g.lsc.dlsc9(:,k);
+            g.lsc.lsc10(:,j) = g.lsc.lsc10(:,k) + h_sol*g.lsc.dlsc10(:,k);
+            g.lsc.lsc11(:,j) = g.lsc.lsc11(:,k) + h_sol*g.lsc.dlsc11(:,k);
+            g.lsc.lsc12(:,j) = g.lsc.lsc12(:,k) + h_sol*g.lsc.dlsc12(:,k);
+            g.lsc.lsc13(:,j) = g.lsc.lsc13(:,k) + h_sol*g.lsc.dlsc13(:,k);
+            g.lsc.lsc14(:,j) = g.lsc.lsc14(:,k) + h_sol*g.lsc.dlsc14(:,k);
+            g.lsc.lsc15(:,j) = g.lsc.lsc15(:,k) + h_sol*g.lsc.dlsc15(:,k);
+        end
+        %
+        % reec
+        %
+        if (g.reec.n_reec ~= 0)
+            g.reec.reec1(:,j) = g.reec.reec1(:,k) + h_sol*g.reec.dreec1(:,k);
+            g.reec.reec2(:,j) = g.reec.reec2(:,k) + h_sol*g.reec.dreec2(:,k);
+            g.reec.reec3(:,j) = g.reec.reec3(:,k) + h_sol*g.reec.dreec3(:,k);
+            g.reec.reec4(:,j) = g.reec.reec4(:,k) + h_sol*g.reec.dreec4(:,k);
+            g.reec.reec5(:,j) = g.reec.reec5(:,k) + h_sol*g.reec.dreec5(:,k);
+            g.reec.reec6(:,j) = g.reec.reec6(:,k) + h_sol*g.reec.dreec6(:,k);
+            g.reec.reec7(:,j) = g.reec.reec7(:,k) + h_sol*g.reec.dreec7(:,k);
+            g.reec.reec8(:,j) = g.reec.reec8(:,k) + h_sol*g.reec.dreec8(:,k);
+            g.reec.reec9(:,j) = g.reec.reec9(:,k) + h_sol*g.reec.dreec9(:,k);
+            g.reec.reec10(:,j) = g.reec.reec10(:,k) + h_sol*g.reec.dreec10(:,k);
+        end
         %
         % ess
         %
-        g.ess.ess1(:,j) = g.ess.ess1(:,k) + h_sol*g.ess.dess1(:,k);
-        g.ess.ess2(:,j) = g.ess.ess2(:,k) + h_sol*g.ess.dess2(:,k);
-        g.ess.ess3(:,j) = g.ess.ess3(:,k) + h_sol*g.ess.dess3(:,k);
-        g.ess.ess4(:,j) = g.ess.ess4(:,k) + h_sol*g.ess.dess4(:,k);
-        g.ess.ess5(:,j) = g.ess.ess5(:,k) + h_sol*g.ess.dess5(:,k);
+        if (g.ess.n_ess ~= 0)
+            g.ess.ess1(:,j) = g.ess.ess1(:,k) + h_sol*g.ess.dess1(:,k);
+            g.ess.ess2(:,j) = g.ess.ess2(:,k) + h_sol*g.ess.dess2(:,k);
+            g.ess.ess3(:,j) = g.ess.ess3(:,k) + h_sol*g.ess.dess3(:,k);
+            g.ess.ess4(:,j) = g.ess.ess4(:,k) + h_sol*g.ess.dess4(:,k);
+            g.ess.ess5(:,j) = g.ess.ess5(:,k) + h_sol*g.ess.dess5(:,k);
+        end
 
-        if (g.ess.n_essud ~= 0)
+        if ((g.ess.n_ess ~= 0) && (g.ess.n_essud ~= 0))
             for idx = 1:numel(xess_dc.s)
                 xess_dc.s{idx}(:,j) = xess_dc.s{idx}(:,k) ...
                                       + h_sol*xess_dc.ds{idx}(:,k);
@@ -1556,14 +1655,39 @@ while (kt <= ktmax)
             end
         end
         %
-        % ivmmod
+        % gfma
         %
-        if (g.mac.n_ivm ~= 0)
-            for index = 1:g.mac.n_ivm
-                ivmmod_d_sigst{index}(:,j) = ivmmod_d_sigst{index}(:,k) ...
-                                             + h_sol*divmmod_d_sigst{index}(:,k);
-                ivmmod_e_sigst{index}(:,j) = ivmmod_e_sigst{index}(:,k) ...
-                                             + h_sol*divmmod_e_sigst{index}(:,k);
+        if (g.gfma.n_gfma ~= 0)
+            g.gfma.gfma1(:,j) = g.gfma.gfma1(:,k) + h_sol*g.gfma.dgfma1(:,k);
+            g.gfma.gfma2(:,j) = g.gfma.gfma2(:,k) + h_sol*g.gfma.dgfma2(:,k);
+            g.gfma.gfma3(:,j) = g.gfma.gfma3(:,k) + h_sol*g.gfma.dgfma3(:,k);
+            g.gfma.gfma4(:,j) = g.gfma.gfma4(:,k) + h_sol*g.gfma.dgfma4(:,k);
+            g.gfma.gfma5(:,j) = g.gfma.gfma5(:,k) + h_sol*g.gfma.dgfma5(:,k);
+            g.gfma.gfma6(:,j) = g.gfma.gfma6(:,k) + h_sol*g.gfma.dgfma6(:,k);
+            g.gfma.gfma7(:,j) = g.gfma.gfma7(:,k) + h_sol*g.gfma.dgfma7(:,k);
+            g.gfma.gfma8(:,j) = g.gfma.gfma8(:,k) + h_sol*g.gfma.dgfma8(:,k);
+            g.gfma.gfma9(:,j) = g.gfma.gfma9(:,k) + h_sol*g.gfma.dgfma9(:,k);
+            g.gfma.gfma10(:,j) = g.gfma.gfma10(:,k) + h_sol*g.gfma.dgfma10(:,k);
+        end
+        %
+        % ivm
+        %
+        if (g.mac.mac_ang(g.mac.mac_ivm_idx,j) ~= mac_ang_ivm_old)
+            g.mac.mac_spd(g.mac.mac_ivm_idx,k) = ...
+               (g.mac.mac_ang(g.mac.mac_ivm_idx,j) ...
+                - mac_ang_ivm_old)./(h_sol*g.sys.basrad) ...
+               + g.mac.mac_spd(g.mac.mac_ivm_idx,1);
+        else
+            g.mac.mac_spd(g.mac.mac_ivm_idx,k) = ...
+                g.mac.mac_spd(g.mac.mac_ivm_idx,max(k-1,1));
+        end
+        %
+        % ivm_sud
+        %
+        if (g.ivm.n_ivmud ~= 0)
+            for idx = 1:numel(xivm_dc.s)
+                xivm_dc.s{idx}(:,j) = xivm_dc.s{idx}(:,k) ...
+                                      + h_sol*xivm_dc.ds{idx}(:,k);
             end
         end
 
@@ -1575,13 +1699,28 @@ while (kt <= ktmax)
         % g.sys.mach_ref(j) = g.mac.mac_ang(g.sys.syn_ref,j);
         g.sys.mach_ref(j) = 0;
 
+        % updating ivm commands to allow time constants to be bypassed
+        if (g.gfma.n_gfma ~= 0)
+            g.mac.vex(g.mac.mac_ivm_idx,j) = g.mac.vex(g.mac.mac_ivm_idx,k);
+            g.mac.fldcur(g.mac.mac_ivm_idx,j) = g.mac.fldcur(g.mac.mac_ivm_idx,k);
+
+            busnum = g.bus.bus_int(g.gfma.gfma_con(:,2));
+            g.bus.bus_v(busnum,j) = g.bus.bus_v(busnum,k);
+        end
+
         % perform network interface calculations again with predicted states
-        mpm_sig(t(j),j);
         mac_ind(0,j,bus_sim,flag);
         mac_igen(0,j,bus_sim,flag);
         mac_sub(0,j,bus_sim,flag);
         mac_tra(0,j,bus_sim,flag);
         mac_em(0,j,bus_sim,flag);
+
+        gfma(0,j,bus_sim,flag);
+
+        if (g.ivm.n_ivmud ~= 0)
+            xivm_dc = ivm_sud(0,j,bus_sim,flag,xivm_dc);
+        end
+
         mac_ivm(0,j,bus_sim,flag);
 
         % assume Vdc remains unchanged for first pass through dc controls interface
@@ -1635,19 +1774,9 @@ while (kt <= ktmax)
             bo = boprf;
         end
 
-        % apply gen trip - added from v2.3 - 06/01/20 - thad
-        if (sum(mac_trip_flags) > 0.5)
-            genBuses = g.mac.mac_con(mac_trip_flags == 1,2);
-            for kB = 1:length(genBuses)
-                nL = find(genBuses(kB) == line_sim(:,1) ...
-                          | genBuses(kB) == line_sim(:,2));
-                if isempty(nL)
-                    error('s_simu: nL is empty.');
-                end
-                line_sim(nL,4) = 1e7;  % make reactance infinite
-            end
+        if g.trip.enable
+            [bus_sim,line_sim] = trip_handler(t(j),j,false,bus_sim,line_sim);
             [Y1,Y2,Y3,Y4,Vr1,Vr2,bo] = red_ybus(bus_sim,line_sim);
-            clear('nL','kB','genBuses');
         end
 
         % form the network interface variables
@@ -1703,16 +1832,16 @@ while (kt <= ktmax)
 
         mdc_sig(t(j),j);
         dc_cont(0,j,10*(j-1)+1,bus_sim,flag);
-        %
+
         dpwf(0,j,flag);
         pss(0,j,flag);
-        %
+
         mexc_sig(t(j),j);
         smpexc(0,j,flag);
         smppi(0,j,flag);
         exc_st3(0,j,flag);
         exc_dc12(0,j,flag);
-        %
+
         mtg_sig(t(j),j);
         tg(0,j,flag);
         tg_hydro(0,j,flag);
@@ -1753,23 +1882,24 @@ while (kt <= ktmax)
 
         % corrector step
         flag = 2;
-        %
+
         mpm_sig(t(j),j);
         mac_ind(0,j,bus_sim,flag);
         mac_igen(0,j,bus_sim,flag);
         mac_sub(0,j,bus_sim,flag);
         mac_tra(0,j,bus_sim,flag);
         mac_em(0,j,bus_sim,flag);
-        %
+        mac_ivm(0,j,bus_sim,flag);
+
         dpwf(0,j,flag);
         pss(0,j,flag);
-        %
+
         mexc_sig(t(j),j);
         smpexc(0,j,flag);
         smppi(0,j,flag);
         exc_st3(0,j,flag);
         exc_dc12(0,j,flag);
-        %
+
         mtg_sig(t(j),j);
         tg(0,j,flag);
         tg_hydro(0,j,flag);
@@ -1813,7 +1943,9 @@ while (kt <= ktmax)
 
         if (g.ess.n_ess ~= 0)
             mess_sig(t(j),j);
+            mreec_sig(t(j),j);
             lsc(0,j,bus_sim,flag);
+            reec(0,j,bus_sim,flag,h_sol);
             xess_dc = ess_sud(0,j,bus_sim,flag,xess_dc);
             ess(0,j,bus_sim,flag,h_sol);
         end
@@ -1873,49 +2005,13 @@ while (kt <= ktmax)
             clear('P','Q','Pst','Qst','dp','dq','index');
         end
 
-        if (g.mac.n_ivm > 0)
-            dst = cell(g.mac.n_ivm,1);
-            est = dst;
-            for index = 1:g.mac.n_ivm
-                dst{index} = ivmmod_d_sigst{index}(:,j);
-                est{index} = ivmmod_e_sigst{index}(:,j);
+        % ivm control models
+        if (g.ivm.n_ivm ~= 0)
+            mgfma_sig(t(j),j);
+            gfma(0,j,bus_sim,flag);
+            if (g.ivm.n_ivmud ~= 0)
+                xivm_dc = ivm_sud(0,j,bus_sim,flag,xivm_dc);
             end
-
-            [d,e,~,~,~,~] = ivmmod_dyn(dst,est,bus,t,j,1);
-            if (length(d) ~= g.mac.n_ivm || length(e) ~= g.mac.n_ivm)
-                error('s_simu: dimension error in ivmmod_dyn.');
-            end
-
-            g.mac.ivmmod_d_sig(:,j) = d;
-            g.mac.ivmmod_e_sig(:,j) = e;
-            mac_ivm(0,j,bus_sim,flag);
-
-            [~,~,dd,de,~,~] = ivmmod_dyn(dst,est,bus,t,j,flag);
-            if (~iscell(dd) || ~iscell(de))
-                error('s_simu: error in ivmmod_dyn, dd and de must be cells.');
-            end
-
-            if (any(size(dd)-[g.mac.n_ivm,1]) || any(size(de)-[g.mac.n_ivm,1]))
-                error('s_simu: dimension error in ivmmod_dyn.');
-            end
-
-            for index = 1:g.mac.n_ivm
-                if (size(dd{index},2) ~= 1 || size(de{index},2) ~= 1)
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                if (size(dd{index},1) ~= size(divmmod_d_sigst{index},1))
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                if (size(de{index},1) ~= size(divmmod_e_sigst{index},1))
-                    error('s_simu: dimension error in ivmmod_dyn.');
-                end
-
-                divmmod_d_sigst{index}(:,j) = dd{index};
-                divmmod_e_sigst{index}(:,j) = de{index};
-            end
-            clear('d','e','dd','de','dst','est');
         end
 
         if (g.dc.n_conv ~= 0)
@@ -2026,49 +2122,78 @@ while (kt <= ktmax)
         %
         % lsc
         %
-        g.lsc.lsc1(:,j) = g.lsc.lsc1(:,k) ...
-                          + h_sol*(g.lsc.dlsc1(:,k) + g.lsc.dlsc1(:,j))/2;
-        g.lsc.lsc2(:,j) = g.lsc.lsc2(:,k) ...
-                          + h_sol*(g.lsc.dlsc2(:,k) + g.lsc.dlsc2(:,j))/2;
-        g.lsc.lsc3(:,j) = g.lsc.lsc3(:,k) ...
-                          + h_sol*(g.lsc.dlsc3(:,k) + g.lsc.dlsc3(:,j))/2;
-        g.lsc.lsc4(:,j) = g.lsc.lsc4(:,k) ...
-                          + h_sol*(g.lsc.dlsc4(:,k) + g.lsc.dlsc4(:,j))/2;
-        g.lsc.lsc5(:,j) = g.lsc.lsc5(:,k) ...
-                          + h_sol*(g.lsc.dlsc5(:,k) + g.lsc.dlsc5(:,j))/2;
-        g.lsc.lsc6(:,j) = g.lsc.lsc6(:,k) ...
-                          + h_sol*(g.lsc.dlsc6(:,k) + g.lsc.dlsc6(:,j))/2;
-        g.lsc.lsc7(:,j) = g.lsc.lsc7(:,k) ...
-                          + h_sol*(g.lsc.dlsc7(:,k) + g.lsc.dlsc7(:,j))/2;
-        g.lsc.lsc8(:,j) = g.lsc.lsc8(:,k) ...
-                          + h_sol*(g.lsc.dlsc8(:,k) + g.lsc.dlsc8(:,j))/2;
-        g.lsc.lsc9(:,j) = g.lsc.lsc9(:,k) ...
-                          + h_sol*(g.lsc.dlsc9(:,k) + g.lsc.dlsc9(:,j))/2;
-        g.lsc.lsc10(:,j) = g.lsc.lsc10(:,k) ...
-                           + h_sol*(g.lsc.dlsc10(:,k) + g.lsc.dlsc10(:,j))/2;
-        g.lsc.lsc11(:,j) = g.lsc.lsc11(:,k) ...
-                           + h_sol*(g.lsc.dlsc11(:,k) + g.lsc.dlsc11(:,j))/2;
-        g.lsc.lsc12(:,j) = g.lsc.lsc12(:,k) ...
-                           + h_sol*(g.lsc.dlsc12(:,k) + g.lsc.dlsc12(:,j))/2;
-        g.lsc.lsc13(:,j) = g.lsc.lsc13(:,k) ...
-                           + h_sol*(g.lsc.dlsc13(:,k) + g.lsc.dlsc13(:,j))/2;
-        g.lsc.lsc14(:,j) = g.lsc.lsc14(:,k) ...
-                           + h_sol*(g.lsc.dlsc14(:,k) + g.lsc.dlsc14(:,j))/2;
-        g.lsc.lsc15(:,j) = g.lsc.lsc15(:,k) ...
-                           + h_sol*(g.lsc.dlsc15(:,k) + g.lsc.dlsc15(:,j))/2;
+        if (g.lsc.n_lsc ~= 0)
+            g.lsc.lsc1(:,j) = g.lsc.lsc1(:,k) ...
+                              + h_sol*(g.lsc.dlsc1(:,k) + g.lsc.dlsc1(:,j))/2;
+            g.lsc.lsc2(:,j) = g.lsc.lsc2(:,k) ...
+                              + h_sol*(g.lsc.dlsc2(:,k) + g.lsc.dlsc2(:,j))/2;
+            g.lsc.lsc3(:,j) = g.lsc.lsc3(:,k) ...
+                              + h_sol*(g.lsc.dlsc3(:,k) + g.lsc.dlsc3(:,j))/2;
+            g.lsc.lsc4(:,j) = g.lsc.lsc4(:,k) ...
+                              + h_sol*(g.lsc.dlsc4(:,k) + g.lsc.dlsc4(:,j))/2;
+            g.lsc.lsc5(:,j) = g.lsc.lsc5(:,k) ...
+                              + h_sol*(g.lsc.dlsc5(:,k) + g.lsc.dlsc5(:,j))/2;
+            g.lsc.lsc6(:,j) = g.lsc.lsc6(:,k) ...
+                              + h_sol*(g.lsc.dlsc6(:,k) + g.lsc.dlsc6(:,j))/2;
+            g.lsc.lsc7(:,j) = g.lsc.lsc7(:,k) ...
+                              + h_sol*(g.lsc.dlsc7(:,k) + g.lsc.dlsc7(:,j))/2;
+            g.lsc.lsc8(:,j) = g.lsc.lsc8(:,k) ...
+                              + h_sol*(g.lsc.dlsc8(:,k) + g.lsc.dlsc8(:,j))/2;
+            g.lsc.lsc9(:,j) = g.lsc.lsc9(:,k) ...
+                              + h_sol*(g.lsc.dlsc9(:,k) + g.lsc.dlsc9(:,j))/2;
+            g.lsc.lsc10(:,j) = g.lsc.lsc10(:,k) ...
+                               + h_sol*(g.lsc.dlsc10(:,k) + g.lsc.dlsc10(:,j))/2;
+            g.lsc.lsc11(:,j) = g.lsc.lsc11(:,k) ...
+                               + h_sol*(g.lsc.dlsc11(:,k) + g.lsc.dlsc11(:,j))/2;
+            g.lsc.lsc12(:,j) = g.lsc.lsc12(:,k) ...
+                               + h_sol*(g.lsc.dlsc12(:,k) + g.lsc.dlsc12(:,j))/2;
+            g.lsc.lsc13(:,j) = g.lsc.lsc13(:,k) ...
+                               + h_sol*(g.lsc.dlsc13(:,k) + g.lsc.dlsc13(:,j))/2;
+            g.lsc.lsc14(:,j) = g.lsc.lsc14(:,k) ...
+                               + h_sol*(g.lsc.dlsc14(:,k) + g.lsc.dlsc14(:,j))/2;
+            g.lsc.lsc15(:,j) = g.lsc.lsc15(:,k) ...
+                               + h_sol*(g.lsc.dlsc15(:,k) + g.lsc.dlsc15(:,j))/2;
+        end
+        %
+        % reec
+        %
+        if (g.reec.n_reec ~= 0)
+            g.reec.reec1(:,j) = g.reec.reec1(:,k) ...
+                                + h_sol*(g.reec.dreec1(:,k) + g.reec.dreec1(:,j))/2;
+            g.reec.reec2(:,j) = g.reec.reec2(:,k) ...
+                                + h_sol*(g.reec.dreec2(:,k) + g.reec.dreec2(:,j))/2;
+            g.reec.reec3(:,j) = g.reec.reec3(:,k) ...
+                                + h_sol*(g.reec.dreec3(:,k) + g.reec.dreec3(:,j))/2;
+            g.reec.reec4(:,j) = g.reec.reec4(:,k) ...
+                                + h_sol*(g.reec.dreec4(:,k) + g.reec.dreec4(:,j))/2;
+            g.reec.reec5(:,j) = g.reec.reec5(:,k) ...
+                                + h_sol*(g.reec.dreec5(:,k) + g.reec.dreec5(:,j))/2;
+            g.reec.reec6(:,j) = g.reec.reec6(:,k) ...
+                                + h_sol*(g.reec.dreec6(:,k) + g.reec.dreec6(:,j))/2;
+            g.reec.reec7(:,j) = g.reec.reec7(:,k) ...
+                                + h_sol*(g.reec.dreec7(:,k) + g.reec.dreec7(:,j))/2;
+            g.reec.reec8(:,j) = g.reec.reec8(:,k) ...
+                                + h_sol*(g.reec.dreec8(:,k) + g.reec.dreec8(:,j))/2;
+            g.reec.reec9(:,j) = g.reec.reec9(:,k) ...
+                                + h_sol*(g.reec.dreec9(:,k) + g.reec.dreec9(:,j))/2;
+            g.reec.reec10(:,j) = g.reec.reec10(:,k) ...
+                                + h_sol*(g.reec.dreec10(:,k) + g.reec.dreec10(:,j))/2;
+        end
         %
         % ess
         %
-        g.ess.ess1(:,j) = g.ess.ess1(:,k) ...
-                          + h_sol*(g.ess.dess1(:,k) + g.ess.dess1(:,j))/2;
-        g.ess.ess2(:,j) = g.ess.ess2(:,k) ...
-                          + h_sol*(g.ess.dess2(:,k) + g.ess.dess2(:,j))/2;
-        g.ess.ess3(:,j) = g.ess.ess3(:,k) ...
-                          + h_sol*(g.ess.dess3(:,k) + g.ess.dess3(:,j))/2;
-        g.ess.ess4(:,j) = g.ess.ess4(:,k) ...
-                          + h_sol*(g.ess.dess4(:,k) + g.ess.dess4(:,j))/2;
-        g.ess.ess5(:,j) = g.ess.ess5(:,k) ...
-                          + h_sol*(g.ess.dess5(:,k) + g.ess.dess5(:,j))/2;
+        if (g.ess.n_ess ~= 0)
+            g.ess.ess1(:,j) = g.ess.ess1(:,k) ...
+                              + h_sol*(g.ess.dess1(:,k) + g.ess.dess1(:,j))/2;
+            g.ess.ess2(:,j) = g.ess.ess2(:,k) ...
+                              + h_sol*(g.ess.dess2(:,k) + g.ess.dess2(:,j))/2;
+            g.ess.ess3(:,j) = g.ess.ess3(:,k) ...
+                              + h_sol*(g.ess.dess3(:,k) + g.ess.dess3(:,j))/2;
+            g.ess.ess4(:,j) = g.ess.ess4(:,k) ...
+                              + h_sol*(g.ess.dess4(:,k) + g.ess.dess4(:,j))/2;
+            g.ess.ess5(:,j) = g.ess.ess5(:,k) ...
+                              + h_sol*(g.ess.dess5(:,k) + g.ess.dess5(:,j))/2;
+        end
         %
         if (g.ess.n_essud ~= 0)
             for idx = 1:numel(xess_dc.s)
@@ -2123,19 +2248,51 @@ while (kt <= ktmax)
             end
         end
         %
-        % ivmmod
+        % gfma
         %
-        if (g.mac.n_ivm ~= 0)
-            for index = 1:g.mac.n_ivm
-                ivmmod_d_sigst{index}(:,j) = ...
-                    ivmmod_d_sigst{index}(:,k) ...
-                    + h_sol*(divmmod_d_sigst{index}(:,j) ...
-                             + divmmod_d_sigst{index}(:,k))/2;
-
-                ivmmod_e_sigst{index}(:,j) = ...
-                    ivmmod_e_sigst{index}(:,k) ...
-                    + h_sol*(divmmod_e_sigst{index}(:,j) ...
-                             + divmmod_e_sigst{index}(:,k))/2;
+        if (g.gfma.n_gfma ~= 0)
+            g.gfma.gfma1(:,j) = g.gfma.gfma1(:,k) ...
+                              + h_sol*(g.gfma.dgfma1(:,k) + g.gfma.dgfma1(:,j))/2;
+            g.gfma.gfma2(:,j) = g.gfma.gfma2(:,k) ...
+                              + h_sol*(g.gfma.dgfma2(:,k) + g.gfma.dgfma2(:,j))/2;
+            g.gfma.gfma3(:,j) = g.gfma.gfma3(:,k) ...
+                              + h_sol*(g.gfma.dgfma3(:,k) + g.gfma.dgfma3(:,j))/2;
+            g.gfma.gfma4(:,j) = g.gfma.gfma4(:,k) ...
+                              + h_sol*(g.gfma.dgfma4(:,k) + g.gfma.dgfma4(:,j))/2;
+            g.gfma.gfma5(:,j) = g.gfma.gfma5(:,k) ...
+                              + h_sol*(g.gfma.dgfma5(:,k) + g.gfma.dgfma5(:,j))/2;
+            g.gfma.gfma6(:,j) = g.gfma.gfma6(:,k) ...
+                              + h_sol*(g.gfma.dgfma6(:,k) + g.gfma.dgfma6(:,j))/2;
+            g.gfma.gfma7(:,j) = g.gfma.gfma7(:,k) ...
+                              + h_sol*(g.gfma.dgfma7(:,k) + g.gfma.dgfma7(:,j))/2;
+            g.gfma.gfma8(:,j) = g.gfma.gfma8(:,k) ...
+                              + h_sol*(g.gfma.dgfma8(:,k) + g.gfma.dgfma8(:,j))/2;
+            g.gfma.gfma9(:,j) = g.gfma.gfma9(:,k) ...
+                              + h_sol*(g.gfma.dgfma9(:,k) + g.gfma.dgfma9(:,j))/2;
+            g.gfma.gfma10(:,j) = g.gfma.gfma10(:,k) ...
+                               + h_sol*(g.gfma.dgfma10(:,k) + g.gfma.dgfma10(:,j))/2;
+        end
+        %
+        % ivm
+        %
+        if (g.mac.mac_ang(g.mac.mac_ivm_idx,j) ~= mac_ang_ivm_old)
+            g.mac.mac_spd(g.mac.mac_ivm_idx,j) = ...
+               2*((g.mac.mac_ang(g.mac.mac_ivm_idx,j) ...
+                   - mac_ang_ivm_old)./(h_sol*g.sys.basrad) ...
+                  + g.mac.mac_spd(g.mac.mac_ivm_idx,1)) ...
+               - g.mac.mac_spd(g.mac.mac_ivm_idx,k);
+        else
+            g.mac.mac_spd(g.mac.mac_ivm_idx,j) = ...
+                g.mac.mac_spd(g.mac.mac_ivm_idx,max(j-1,1));
+        end
+        %
+        % ivm_sud
+        %
+        if (g.ivm.n_ivmud ~= 0)
+            for idx = 1:numel(xivm_dc.s)
+                xivm_dc.s{idx}(:,j) = ...
+                    xivm_dc.s{idx}(:,k) ...
+                    + h_sol*(xivm_dc.ds{idx}(:,k) + xivm_dc.ds{idx}(:,j))/2;
             end
         end
     end
@@ -2294,16 +2451,16 @@ dxdci_dc = dxdci_dc(:,1:length(t_dc));
 
 % clear global
 clear ans B b_num1 b_num2 bo bof bopf1 bopf2 boprf bus_f bus_idx bus_intf
-clear bus_intpf1 bus_intpf2 bus_intprf bus_pf1 bus_pf2 bus_sim conv_num
-clear dci_dc dcr_dc dcr_states dfile et ets f f_nearbus f_type flag h
-clear h_sol H_sum i IHT i_aci i_acr i_plot inv_par j jj k k_end k_inc
-clear k_start k_tot ks kt ktmax lfile line_f line_flw line_par line_pf1
-clear line_pf2 line_sim lswitch lt n n_switch pathname phi plot_now R
-clear rec_num rec_par SHT sel st_state sv svc_dc sw_count t_switch
-clear tcsc_dc tdfile tot_states tswitch VLT V_rgf V_rgpf1 V_rgpf2 V_rgprf
-clear V_rncf V_rncpf1 V_rncpf2 V_rncprf Vr1 Vr2 vnc X Y1 Y2 Y3 Y4 Y_gf
-clear Y_gncf Y_gncpf1 Y_gncpf2 Y_gncprf Y_gpf1 Y_gpf2 Y_gprf Y_ncf Y_ncgf
-clear Y_ncgpf1 Y_ncgpf2 Y_ncgprf Y_ncpf1 Y_ncpf2 Y_ncprf ydcrmn ydcrmx z
-clear z1 z_dpw z_pss z_tg zdc zdcl ze zig zm
+clear bus_intpf1 bus_intpf2 bus_intprf bus_pf1 bus_pf2 bus_sim conv_num dci_dc
+clear dcr_dc dcr_states dfile et ets f f1 f2 f3 f_nearbus f_type flag h h_sol
+clear H_sum i i_aci i_acr i_plot inv_par IHT j jj k k_end k_inc k_start k_tot
+clear ks kt ktmax lfile line_f line_flw line_par line_pf1 line_pf2 line_sim
+clear lswitch lt mac_ang_ivm_old n n_switch o_gfma o_reec pathname phi
+clear plot_now rec_num rec_par R sel st_state sv svc_dc sw_count SHT t_switch
+clear tcsc_dc tdfile tot_states tswitch vnc VLT V_rgf V_rgpf1 V_rgpf2 V_rgprf
+clear V_rncf V_rncpf1 V_rncpf2 V_rncprf Vr1 Vr2 X ydcrmn ydcrmx Y1 Y2 Y3 Y4
+clear Y_gf Y_gncf Y_gncpf1 Y_gncpf2 Y_gncprf Y_gpf1 Y_gpf2 Y_gprf Y_ncf Y_ncgf
+clear Y_ncgpf1 Y_ncgpf2 Y_ncgprf Y_ncpf1 Y_ncpf2 Y_ncprf z z1 z_dpw z_gfma
+clear z_pss z_reec z_tg zdc zdcl ze zig zm
 
 % eof

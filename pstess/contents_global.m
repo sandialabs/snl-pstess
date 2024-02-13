@@ -1,13 +1,71 @@
 %-----------------------------------------------------------------------------%
 % List of global variables for power system simulation
 %
-% Power and Energy Storage Systems Toolbox, PSTess, v1.0
+% Power and Energy Storage Systems Toolbox, PSTess, v1.1
 %-----------------------------------------------------------------------------%
 
 % bus // algebraic network variables
+% g.bus.n_bus
 % g.bus.bus_v
 % g.bus.theta
 % g.bus.bus_int
+
+% dc // hvdc variables
+% g.dc.dcsp_con
+% g.dc.dcl_con
+% g.dc.dcc_con
+% g.dc.dcc_pot
+% g.dc.dc_pot
+% g.dc.ac_bus
+% g.dc.rec_ac_bus
+% g.dc.inv_ac_bus
+% g.dc.ac_line
+% g.dc.rec_ac_line
+% g.dc.inv_ac_line
+% g.dc.n_conv
+% g.dc.n_dcl
+% g.dc.r_idx
+% g.dc.i_idx
+% g.dc.dcli_idx
+% g.dc.ldc_idx
+% g.dc.ric_idx
+% g.dc.rpc_idx
+% g.dc.l_cap
+% g.dc.l_no_cap
+% g.dc.cap_idx
+% g.dc.no_cap_idx
+% g.dc.no_ind_idx
+% g.dc.alpha
+% g.dc.gamma
+% g.dc.Vdc
+% g.dc.Vdc_ref
+% g.dc.i_dc
+% g.dc.cur_ord
+% g.dc.i_dci
+% g.dc.i_dcr
+% g.dc.v_dcc
+% g.dc.v_conr
+% g.dc.v_coni
+% g.dc.dv_dcc
+% g.dc.di_dcr
+% g.dc.di_dci
+% g.dc.dv_conr
+% g.dc.dv_coni
+% g.dc.tapr
+% g.dc.tapi
+% g.dc.tminr
+% g.dc.tmini
+% g.dc.tmaxr
+% g.dc.tmaxi
+% g.dc.tstepr
+% g.dc.tstepi
+% g.dc.ndcr_ud
+% g.dc.ndci_ud
+% g.dc.dcrud_idx
+% g.dc.dciud_idx
+% g.dc.dc_sig
+% g.dc.dcr_dsig
+% g.dc.dci_dsig
 
 % dpw // delta-p-omega pss filters
 % g.dpw.dpw_pss_idx
@@ -131,6 +189,38 @@
 % g.freq.bus_freqf
 % g.freq.bus_freqsnl
 
+% gfma // droop-based grid-forming inverter controls
+% g.gfma.dgfma1
+% g.gfma.dgfma2
+% g.gfma.dgfma3
+% g.gfma.dgfma4
+% g.gfma.dgfma5
+% g.gfma.dgfma6
+% g.gfma.dgfma7
+% g.gfma.dgfma8
+% g.gfma.dgfma9
+% g.gfma.dgfma10
+% g.gfma.gfma1
+% g.gfma.gfma2
+% g.gfma.gfma3
+% g.gfma.gfma4
+% g.gfma.gfma5
+% g.gfma.gfma6
+% g.gfma.gfma7
+% g.gfma.gfma8
+% g.gfma.gfma9
+% g.gfma.gfma10
+% g.gfma.gfma_con
+% g.gfma.gfma_sig
+% g.gfma.ivm_idx
+% g.gfma.lim_flag
+% g.gfma.mac_idx
+% g.gfma.pset
+% g.gfma.qset
+% g.gfma.vset
+% g.gfma.vref
+% g.gfma.n_gfma
+
 % igen // induction generators
 % g.igen.tmig
 % g.igen.igen_con
@@ -241,9 +331,11 @@
 % g.mac.n_ib_em
 % g.mac.n_ib_tra
 % g.mac.n_ib_sub
+% g.mac.n_ib_ivm
 % g.mac.mac_ib_em
 % g.mac.mac_ib_tra
 % g.mac.mac_ib_sub
+% g.mac.mac_ib_ivm
 % g.mac.n_pm
 % g.mac.pm_sig
 % g.mac.pmech
@@ -314,6 +406,48 @@
 % g.pwr.pwrmod_q_st
 % g.pwr.dpwrmod_q_st
 
+% reec // renewable energy electrical control
+% g.reec.icmd
+% g.reec.pref
+% g.reec.qref
+% g.reec.vblk
+% g.reec.vdip
+% g.reec.iqmax
+% g.reec.iqmin
+% g.reec.reec1
+% g.reec.reec2
+% g.reec.reec3
+% g.reec.reec4
+% g.reec.reec5
+% g.reec.reec6
+% g.reec.reec7
+% g.reec.reec8
+% g.reec.reec9
+% g.reec.reec10
+% g.reec.vref0
+% g.reec.vref1
+% g.reec.dreec1
+% g.reec.dreec2
+% g.reec.dreec3
+% g.reec.dreec4
+% g.reec.dreec5
+% g.reec.dreec6
+% g.reec.dreec7
+% g.reec.dreec8
+% g.reec.dreec9
+% g.reec.dreec10
+% g.reec.n_reec
+% g.reec.pfaref
+% g.reec.ess_idx
+% g.reec.reec_con
+% g.reec.reec_pot
+% g.reec.reec_sig
+% g.reec.vblk_tick
+% g.reec.vblk_time
+% g.reec.vdip_icmd
+% g.reec.vdip_tick
+% g.reec.vdip_time
+
 % rlmod // reactive load modulation
 % g.rlmod.n_rlmod
 % g.rlmod.rlmod_idx
@@ -378,61 +512,9 @@
 % g.tg.dtg4
 % g.tg.dtg5
 
-% dc // hvdc variables
-% g.dc.dcsp_con
-% g.dc.dcl_con
-% g.dc.dcc_con
-% g.dc.dcc_pot
-% g.dc.dc_pot
-% g.dc.ac_bus
-% g.dc.rec_ac_bus
-% g.dc.inv_ac_bus
-% g.dc.ac_line
-% g.dc.rec_ac_line
-% g.dc.inv_ac_line
-% g.dc.n_conv
-% g.dc.n_dcl
-% g.dc.r_idx
-% g.dc.i_idx
-% g.dc.dcli_idx
-% g.dc.ldc_idx
-% g.dc.ric_idx
-% g.dc.rpc_idx
-% g.dc.l_cap
-% g.dc.l_no_cap
-% g.dc.cap_idx
-% g.dc.no_cap_idx
-% g.dc.no_ind_idx
-% g.dc.alpha
-% g.dc.gamma
-% g.dc.Vdc
-% g.dc.Vdc_ref
-% g.dc.i_dc
-% g.dc.cur_ord
-% g.dc.i_dci
-% g.dc.i_dcr
-% g.dc.v_dcc
-% g.dc.v_conr
-% g.dc.v_coni
-% g.dc.dv_dcc
-% g.dc.di_dcr
-% g.dc.di_dci
-% g.dc.dv_conr
-% g.dc.dv_coni
-% g.dc.tapr
-% g.dc.tapi
-% g.dc.tminr
-% g.dc.tmini
-% g.dc.tmaxr
-% g.dc.tmaxi
-% g.dc.tstepr
-% g.dc.tstepi
-% g.dc.ndcr_ud
-% g.dc.ndci_ud
-% g.dc.dcrud_idx
-% g.dc.dciud_idx
-% g.dc.dc_sig
-% g.dc.dcr_dsig
-% g.dc.dci_dsig
+% tripping status // variables for tracking the trip and reclosure status
+% g.trip.mac_trip_flags
+% g.trip.load_trip_flags
+% g.trip.line_trip_flags
 
 % eof
