@@ -35,21 +35,21 @@ available in the main `pstess` directory under the folder titled
 
 * **mac_ivm**: the original function mistakenly scaled the generator
   terminal current onto the system base rather than the generator base;
-  this has been corrected; see the file modifications section for
-  additional changes
+  this has been corrected. See the file modifications section for
+  additional changes.
 
 ### Miscellaneous
 <a id="miscellaneous"></a>
 
 * The main purpose of this update is to add support for the
   grid-following inverter model REEC_D and the grid-forming
-  model REGFM_A. For details of their implementation, see
+  model REGFM_A1. For details of their implementation, see
   `reec`, `ivm`, and `gfma`.
 
 ### File modifications
 <a id="file_mods"></a>
 
-* **gfma:** new model for representing REGFM_A droop-controlled grid-forming inverters
+* **gfma:** new model for representing REGFM_A1 droop-controlled grid-forming inverters
 * **gfma_indx:** new function for indexing `gfma` instances
 * **ivm_indx:** new function for indexing `ivm` instances
 * **ivm_sud:** new function for implementing user-defined grid-forming inverter control
