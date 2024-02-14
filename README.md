@@ -12,9 +12,9 @@ Welcome to the Power and Energy Storage Systems Toolbox. This is the
 **PSTess** README. Please refer to the table of contents below to help
 you navigate.
 
-Current release version: 1.0
+Current release version: 1.1
 
-Release date: September, 2021
+Release date: February, 2024
 
 ## Contact
 For issues and feedback, we would appreciate it if you could use the
