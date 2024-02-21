@@ -1,19 +1,19 @@
 % gfma active modulation example
 %
-% Purpose: Example of how to use gfma.m to perturb the control 
-%          references of a droop-controlled grid-forming inverter. 
-%          This example compares the output of the nonlinear and 
+% Purpose: Example of how to use gfma.m to perturb the control
+%          references of a droop-controlled grid-forming inverter.
+%          This example compares the output of the nonlinear and
 %          linearized models for a case where the perturbation comes
 %          from gfma_sig (set in mgfma_sig).
 %
-% Data file = d2asbegp_gfm.m
+% Data file = d2asbegp_gfma.m
 %
 % Note: You must run this example from the `analysis' folder. Before
 %       running, rename the original /pstess/mgfma_sig.m file to
 %       mgfma_sig_original.m. Then move mgfma_sig_example1.m into /pstess
 %       and rename it mgfma_sig.m. Make sure the working directory is
 %       configured in get_path.m. Before running double check that sw_con
-%       in d2asbegp_gfm.m corresponds to ftype=6 (do nothing).
+%       in d2asbegp_gfma.m corresponds to ftype=6 (do nothing).
 %-----------------------------------------------------------------------------%
 
 clear all; close all; clc;
@@ -21,7 +21,7 @@ run('plot_options');
 
 %% Run nonlinear simulation and store results
 cd('../pstess/');
-set_path('d2asbegp_gfm.m');  % set the working directory in get_path
+set_path('d2asbegp_gfma.m');  % set the working directory in get_path
 
 run('s_simu');  % run PSTess
 bus_v = g.bus.bus_v;
