@@ -22,8 +22,6 @@ if (nargin > 0)
     import_flag = varargin{1};
 end
 
-g.ivm.n_ivm = 0;
-g.ivm.n_ivmud = 0;
 g.ivm.divmud_idx = [];
 g.ivm.divmud_mac_idx = [];
 

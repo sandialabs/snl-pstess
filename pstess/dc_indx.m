@@ -24,17 +24,15 @@ global g;  % declaring struct of global variables
 % pick out ac voltages (should be LT converter transformer buses)
 % check that line and cont data is consistent
 
-g.dc.n_conv = 0;
-g.dc.n_dcl = 0;
 g.dc.dcrud_idx = [];
 g.dc.dciud_idx = [];
 g.dc.ndcr_ud = 0;
 g.dc.ndci_ud = 0;
 
 if ~isempty(g.dc.dcsp_con)
-    lconv = length(g.dc.dcsp_con(:,1));
-    lline = length(g.dc.dcl_con(:,1));
-    lcon = length(g.dc.dcc_con(:,1));
+    lconv = size(g.dc.dcsp_con,1);
+    lline = size(g.dc.dcl_con,1);
+    lcon = size(g.dc.dcc_con,1);
     if (lcon ~= 2*lline || lcon ~= lconv)
         estr = '\ndc_indx: dc converter and line data are inconsistent.';
         estr = [estr, '\n  lconv: number of converters = %0.0f'];

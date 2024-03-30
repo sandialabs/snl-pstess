@@ -17,10 +17,7 @@ function ess_indx( )
 
 global g;  % declaring struct of global variables
 
-g.ess.n_ess = 0;
 g.ess.ess_idx = [];
-
-g.ess.n_essud = 0;
 g.ess.dessud_idx = [];
 
 if ~isempty(g.ess.ess_con)

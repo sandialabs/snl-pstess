@@ -16,7 +16,6 @@ function gfma_indx( )
 
 global g;  % declaring struct of global variables
 
-g.gfma.n_gfma = 0;
 g.gfma.ivm_idx = [];
 g.gfma.mac_idx = [];
 

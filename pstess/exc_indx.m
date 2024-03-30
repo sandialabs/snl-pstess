@@ -19,15 +19,14 @@ function exc_indx()
 
 global g;  % declaring struct of global variables
 
-g.exc.n_exc = 0;
+lbnd = 1e-3;  % time constant lower bound
+
 g.exc.n_smp = 0;
 g.exc.n_smppi = 0;
 g.exc.n_dc = 0;
 g.exc.n_dc1 = 0;
 g.exc.n_dc2 = 0;
 g.exc.n_st3 = 0;
-
-lbnd = 1e-3;  % time constant lower bound
 
 if ~isempty(g.exc.exc_con)
     % check for simple exciters

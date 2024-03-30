@@ -9,11 +9,10 @@ function rlmod_indx()
 
 global g;  % declaring struct of global variables
 
-g.rlmod.n_rlmod = 0;
 g.rlmod.rlmod_idx = [];
 
 if ~isempty(g.rlmod.rlmod_con)
-    g.rlmod.n_rlmod = length(g.rlmod.rlmod_con(:,1));
+    g.rlmod.n_rlmod = size(g.rlmod.rlmod_con,1);
     g.rlmod.rlmod_idx = zeros(g.rlmod.n_rlmod,1);
     for j = 1:g.rlmod.n_rlmod
         index = find(g.rlmod.rlmod_con(j,2) == g.ncl.load_con(:,1));

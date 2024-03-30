@@ -14,7 +14,6 @@ function lsc_indx(bus)
 
 global g;  % declaring struct of global variables
 
-g.lsc.n_lsc = 0;
 g.lsc.n_sensor = 0;
 g.lsc.sensor_set = [];
 

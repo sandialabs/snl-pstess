@@ -9,11 +9,10 @@ function lmod_indx()
 
 global g;  % declaring struct of global variables
 
-g.lmod.n_lmod = 0;
 g.lmod.lmod_idx = [];
 
 if ~isempty(g.lmod.lmod_con)
-    g.lmod.n_lmod = length(g.lmod.lmod_con(:,1));
+    g.lmod.n_lmod = size(g.lmod.lmod_con,1);
     g.lmod.lmod_idx = zeros(g.lmod.n_lmod,1);
     for j = 1:g.lmod.n_lmod
         index = find(g.lmod.lmod_con(j,2) == g.ncl.load_con(:,1));

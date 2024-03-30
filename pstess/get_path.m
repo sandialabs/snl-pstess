@@ -11,7 +11,8 @@ function [ data_file, path_name ] = get_path( )
 
 %-----------------------------------------------------------------------------%
 
-path_name = 'C:\Users\joebloggs\workdir\data';
+path_name = pwd;
+path_name = [path_name(1:end-6),'data'];
 
 data_file = 'd2asbegp_ess.m';
 

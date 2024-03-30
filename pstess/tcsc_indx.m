@@ -10,7 +10,6 @@ function tcsc_indx(tcsc_dc)
 
 global g;  % declaring struct of global variables
 
-g.tcsc.n_tcsc = 0;
 g.tcsc.tcsc_idx = [];
 g.tcsc.tcscf_idx = [];
 g.tcsc.tcsct_idx = [];

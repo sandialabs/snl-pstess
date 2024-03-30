@@ -20,8 +20,6 @@ global g;  % declaring struct of global variables
 
 lbnd = 1e-3;  % time constant lower bound
 
-g.pss.n_pss = 0;
-
 if ~isempty(g.pss.pss_con)
     g.pss.pss_idx = find((g.pss.pss_con(:,1) == 1) | (g.pss.pss_con(:,1) == 2));
     g.pss.n_pss = length(g.pss.pss_idx);

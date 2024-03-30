@@ -15,7 +15,6 @@ function pwrmod_indx(bus)
 
 global g;  % declaring struct of global variables
 
-g.pwr.n_pwrmod = 0;
 g.pwr.pwrmod_idx = [];
 
 if ~isempty(g.pwr.pwrmod_con)
@@ -25,7 +24,7 @@ if ~isempty(g.pwr.pwrmod_con)
         error(estr);
     end
 
-    g.pwr.n_pwrmod = length(g.pwr.pwrmod_con(:,1));
+    g.pwr.n_pwrmod = size(g.pwr.pwrmod_con,1);
     g.pwr.pwrmod_idx = zeros(g.pwr.n_pwrmod,1);
     for j = 1:g.pwr.n_pwrmod
         index = find(g.pwr.pwrmod_con(j,1)==g.ncl.load_con(:,1));

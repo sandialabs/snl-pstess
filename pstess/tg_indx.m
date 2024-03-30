@@ -14,8 +14,6 @@ g.tg.tg_idx = [];
 g.tg.n_tgh = 0;
 g.tg.tgh_idx = [];
 
-g.tg.n_tg_tot = 0;
-
 if ~isempty(g.tg.tg_con)
     g.tg.tg_idx = find(g.tg.tg_con(:,1) == 1);
     if ~isempty(g.tg.tg_idx)

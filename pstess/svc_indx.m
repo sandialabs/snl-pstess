@@ -10,7 +10,6 @@ function svc_indx(svc_dc)
 
 global g;  % declaring struct of global variables
 
-g.svc.n_svc = 0;
 g.svc.svc_idx = [];
 g.svc.svcll_idx = [];
 

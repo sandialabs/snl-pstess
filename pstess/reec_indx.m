@@ -15,7 +15,6 @@ function reec_indx( )
 
 global g;  % declaring struct of global variables
 
-g.reec.n_reec = 0;
 g.reec.ess_idx = [];
 
 if ~isempty(g.reec.reec_con)
