@@ -29,8 +29,8 @@ function gfma(i,k,bus,flag)
 %     7     active overload integral gain, kipmax             pu
 %     8     active overload windup flag (1 = anti-windup)     binary
 %     9     Q-V droop gain, mq                                pu
-%    10     active power upper limit, Qmax                    pu
-%    11     active power lower limit, Qmin                    pu
+%    10     reactive power upper limit, Qmax                  pu
+%    11     reactive power lower limit, Qmin                  pu
 %    12     voltage controller proportional gain, kpv         pu
 %    13     voltage controller integral gain, kiv             pu
 %    14     commanded voltage magnitude time constant         s
