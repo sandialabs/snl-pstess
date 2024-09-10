@@ -106,7 +106,7 @@ lbnd = 1e-3;  % lower bound to prevent division by zero
 
 if (~isempty(g.ivm.ivmud_con) && i ~= 0)
     % non-vectorized computation
-    error('\nivm_sud: all user-defined ivm calculations must be vectorized.');
+    error('ivm_sud: all user-defined ivm calculations must be vectorized.');
 elseif (~isempty(g.ivm.ivmud_con) && i == 0)
     if (flag == 0)  % initialization
         % busnum -- vector of bus numbers with ivm_sud controllers

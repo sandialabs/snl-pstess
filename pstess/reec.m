@@ -539,7 +539,7 @@ elseif (~isempty(g.reec.reec_con) && i == 0)
         if (nargin > 4)
             h_sol = varargin{1};
         else
-             error('\nreec: incorrect number of arguments passed to function.');
+             error('reec: incorrect number of arguments passed to function.');
         end
 
         mask = ((g.reec.pref(:,k) - g.reec.pref(:,max(k-1,1)))/h_sol ...
