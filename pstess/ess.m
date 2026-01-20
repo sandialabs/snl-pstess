@@ -121,8 +121,8 @@ elseif (~isempty(g.ess.ess_con) && i == 0)
         % translating the vdl curves into the system base
         for ii = 1:g.ess.n_ess
             vdl = g.ess.vdl{ii};
-            vdl.ip = vdl.ip.*g.ess.ess_pot(:,1);
-            vdl.iq = vdl.iq.*g.ess.ess_pot(:,1);
+            vdl.ip = vdl.ip.*g.ess.ess_pot(ii,1);
+            vdl.iq = vdl.iq.*g.ess.ess_pot(ii,1);
             g.ess.vdl{ii} = vdl;
         end
 
